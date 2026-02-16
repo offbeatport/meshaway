@@ -19,6 +19,9 @@ export interface ObserverServerOptions {
   eventBus: ObserverEventBus;
   onPermissionDecision: (id: string, decision: PermissionDecision) => boolean;
   portStart?: number;
+  /** If set, bind to this host and port instead of finding an open port. */
+  listenHost?: string;
+  listenPort?: number;
 }
 
 export interface ObserverServerHandle {
@@ -28,7 +31,9 @@ export interface ObserverServerHandle {
 }
 
 export async function startObserverServer(options: ObserverServerOptions): Promise<ObserverServerHandle> {
-  const port = await findOpenPort(options.portStart ?? 1618);
+  const port =
+    options.listenPort ?? (await findOpenPort(options.portStart ?? 1618));
+  const hostname = options.listenHost ?? "127.0.0.1";
   const token = randomBytes(24).toString("hex");
   const app = new Hono();
   app.use("*", cors());
@@ -94,7 +99,7 @@ export async function startObserverServer(options: ObserverServerOptions): Promi
   const nodeServer = serve({
     fetch: app.fetch,
     port,
-    hostname: "127.0.0.1",
+    hostname,
   });
 
   return {
