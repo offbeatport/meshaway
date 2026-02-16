@@ -8,7 +8,7 @@ await build({
   format: "cjs",
   outfile: "dist/meshaway.cjs",
   banner: {
-    js: "#!/usr/bin/env node",
+    js: "#!/usr/bin/env node\nif (typeof __filename !== 'undefined') globalThis.__meshImportMetaUrl = require('node:url').pathToFileURL(__filename).href;",
   },
   sourcemap: true,
   legalComments: "none",

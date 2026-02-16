@@ -29,5 +29,7 @@ coverage/
 tmp/
 temp/
 *.tmp
+.sea-config.build.json
+release/sea-prep.blob
 
 .cursor/

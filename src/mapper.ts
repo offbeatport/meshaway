@@ -424,6 +424,7 @@ export class UnifiedTranslator {
   private toGithubEnvelope(normalized: z.infer<typeof NormalizedOutboundSchema>): unknown {
     switch (normalized.kind) {
       case "message_chunk":
+        // ACP session/update (agent_message_chunk) → Copilot token_stream (streaming delta; equivalent to assistant.message_delta).
         return {
           jsonrpc: "2.0",
           method: "token_stream",

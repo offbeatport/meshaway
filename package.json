@@ -15,7 +15,7 @@
     "test:unit": "node --test --import tsx ./tests/unit/**/*.test.ts",
     "test:integration": "node --test --import tsx ./tests/integration/**/*.test.ts",
     "smoke": "tsx ./tests/smoke.ts",
-    "build:native": "npm run build && pkg . --targets node18-macos-arm64 --output release/mesh"
+    "build:native": "npm run build && node scripts/build-sea.mjs"
   },
   "keywords": [
     "cli",
@@ -42,19 +42,8 @@
     "@types/node": "^24.3.3",
     "@types/react": "^19.1.11",
     "@types/react-dom": "^19.1.7",
-    "pkg": "^5.8.1",
+    "postject": "^1.0.0-alpha.6",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
-  },
-  "pkg": {
-    "assets": [
-      "dist/ui/**/*"
-    ],
-    "scripts": [
-      "dist/meshaway.cjs"
-    ],
-    "targets": [
-      "node18-macos-arm64"
-    ]
   }
 }

@@ -11,11 +11,14 @@ import type {
   PermissionDecisionInput,
   PermissionRequestEvent,
 } from "./types.js";
+import type { Provider } from "./types.js";
 import { ObserverEventBus } from "./ui/events.js";
 
 export interface BridgeEngineOptions {
   mode: MeshMode;
   clientType: MeshMode;
+  /** Agent provider (github|claude|gemini). Affects translation when mode is auto. */
+  provider?: Provider;
   agentCommand: string;
   agentArgs: string[];
   cwd: string;
@@ -41,6 +44,15 @@ export class BridgeEngine {
   private stdinFrameBuffer = Buffer.alloc(0);
   private usesJsonRpcFraming = false;
   private started = false;
+  /** Map ACP request id -> Copilot request id for session.send responses. */
+  private readonly acpIdToCopilotId = new Map<string | number, string | number>();
+  /** Map ACP request id -> sessionId for appending assistant.message on response. */
+  private readonly acpIdToSessionId = new Map<string | number, string>();
+  /** Accumulated text from token_stream until we get the response (per in-flight request). */
+  private responseBuffer = "";
+  private agentHandshakeSent = false;
+  private static readonly FORWARD_RESPONSE_TIMEOUT_MS = 5_000;
+  private readonly forwardTimeouts = new Map<string | number, ReturnType<typeof setTimeout>>();
 
   constructor(private readonly options: BridgeEngineOptions) {
     this.eventBus = options.eventBus;
@@ -165,9 +177,46 @@ export class BridgeEngine {
         clientType === "github" ? this.translator.acpToGithub(parsed) : this.translator.acpToClaude(parsed);
       for (const message of translated) {
         this.trackOutbound(message, clientType);
-        this.writeClientMessage(message);
+        const outMsg = this.rewriteResponseIdForClient(message);
+        this.writeClientMessage(outMsg);
       }
     });
+  }
+
+  /** If message is a response with an id we forwarded, rewrite id to the original Copilot request id. */
+  private rewriteResponseIdForClient(message: unknown): unknown {
+    const record = this.asRecord(message);
+    const id = record.id;
+    if (id === undefined || (typeof id !== "string" && typeof id !== "number")) {
+      return message;
+    }
+    const hasResult = "result" in record && record.result !== undefined;
+    const hasError = "error" in record && record.error !== undefined;
+    if (!hasResult && !hasError) {
+      return message;
+    }
+    const copilotId = this.acpIdToCopilotId.get(id);
+    if (copilotId === undefined) {
+      return message;
+    }
+    this.clearForwardTimeout(id);
+    const sessionId = this.acpIdToSessionId.get(id);
+    this.acpIdToCopilotId.delete(id);
+    this.acpIdToSessionId.delete(id);
+    this.pendingRequestIds.delete(id);
+    if (sessionId && this.copilotSessions.has(sessionId)) {
+      const content = this.responseBuffer || "[Agent response]";
+      this.responseBuffer = "";
+      const assistantEvent = this.makeCopilotEvent("assistant.message", {
+        messageId: `msg_${Date.now()}`,
+        content,
+      });
+      this.appendCopilotEvent(sessionId, assistantEvent);
+      this.sendSessionEventNotification(sessionId, assistantEvent);
+      this.appendCopilotEvent(sessionId, this.makeCopilotEvent("session.idle", {}, true));
+      this.sendLifecycleNotification("session.updated", sessionId);
+    }
+    return { ...record, id: copilotId };
   }
 
   private wireChildStderr(): void {
@@ -188,8 +237,10 @@ export class BridgeEngine {
       safeLog("Child agent exited unexpectedly", { code, signal });
       const message = `Child agent crashed (code: ${code ?? "null"}, signal: ${signal ?? "none"})`;
       const clientType = this.resolveCurrentClientType();
-      for (const requestId of this.pendingRequestIds) {
-        const response = this.translator.buildCrashResponse(clientType, requestId, message);
+      for (const acpId of this.pendingRequestIds) {
+        const clientId = this.acpIdToCopilotId.get(acpId) ?? acpId;
+        this.acpIdToCopilotId.delete(acpId);
+        const response = this.translator.buildCrashResponse(clientType, clientId, message);
         this.writeClientMessage(response);
       }
       this.pendingRequestIds.clear();
@@ -252,19 +303,56 @@ export class BridgeEngine {
     if (this.options.clientType === "claude") {
       return "claude";
     }
+    if (this.options.clientType === "auto" && this.options.provider === "gemini") {
+      return "claude";
+    }
     return this.detectedClientType ?? "github";
   }
 
-  private writeToChild(message: unknown): void {
+  private writeToChild(message: unknown, options?: { skipTracking?: boolean }): void {
     if (!this.child?.stdin) {
       safeLog("Cannot write to child, stdin unavailable");
       return;
     }
     const record = this.asRecord(message);
-    if (record.id !== undefined && (typeof record.id === "string" || typeof record.id === "number")) {
+    if (
+      !options?.skipTracking &&
+      record.id !== undefined &&
+      (typeof record.id === "string" || typeof record.id === "number")
+    ) {
       this.pendingRequestIds.add(record.id);
     }
     this.child.stdin.write(`${JSON.stringify(message)}\n`);
+  }
+
+  private sendAcpInitialize(): void {
+    const msg = {
+      jsonrpc: "2.0" as const,
+      id: `init_${Date.now()}`,
+      method: "initialize" as const,
+      params: {
+        protocolVersion: 2,
+        clientCapabilities: {
+          fs: { readTextFile: true, writeTextFile: true },
+          terminal: true,
+        },
+        clientInfo: { name: "meshaway", version: "0.1.0" },
+      },
+    };
+    this.writeToChild(msg, { skipTracking: true });
+  }
+
+  private sendAcpSessionNew(sessionId: string): void {
+    const msg = {
+      jsonrpc: "2.0" as const,
+      id: `new_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      method: "session/new" as const,
+      params: {
+        cwd: this.options.cwd,
+        mcpServers: [],
+      },
+    };
+    this.writeToChild(msg, { skipTracking: true });
   }
 
   private trackInbound(payload: unknown, clientType: ClientType): void {
@@ -308,8 +396,11 @@ export class BridgeEngine {
     const eventType = this.stringValue(record.type);
 
     if (method === "token_stream") {
-      const thought = this.stringValue(this.asRecord(params).thought);
       const delta = this.stringValue(this.asRecord(params).delta);
+      if (delta) {
+        this.responseBuffer += delta;
+      }
+      const thought = this.stringValue(this.asRecord(params).thought);
       if (delta) {
         this.emitObserverEvent({
           type: "thought_chunk",
@@ -452,6 +543,10 @@ export class BridgeEngine {
 
     switch (method) {
       case "ping":
+        if (!this.agentHandshakeSent) {
+          this.agentHandshakeSent = true;
+          this.sendAcpInitialize();
+        }
         this.sendRpcResponse(id, {
           message: this.stringValue(params.message) ?? "pong",
           timestamp: Date.now(),
@@ -557,6 +652,7 @@ export class BridgeEngine {
       startTime: new Date(now).toISOString(),
       context: { cwd: this.options.cwd },
     }));
+    this.sendAcpSessionNew(sessionId);
   }
 
   private handleCopilotResumeSession(id: string | number, params: Record<string, unknown>): void {
@@ -585,23 +681,61 @@ export class BridgeEngine {
     }
 
     const prompt = this.stringValue(params.prompt) ?? "";
-    const messageId = `msg_${Date.now()}`;
     const userEvent = this.makeCopilotEvent("user.message", { content: prompt });
-    const assistantEvent = this.makeCopilotEvent("assistant.message", {
-      messageId,
-      content: `Mesh received: ${prompt}`,
-    });
-    const idleEvent = this.makeCopilotEvent("session.idle", {}, true);
-
     this.appendCopilotEvent(sessionId, userEvent);
-    this.appendCopilotEvent(sessionId, assistantEvent);
-    this.appendCopilotEvent(sessionId, idleEvent);
-
     this.sendSessionEventNotification(sessionId, userEvent);
-    this.sendSessionEventNotification(sessionId, assistantEvent);
-    this.sendSessionEventNotification(sessionId, idleEvent);
     this.sendLifecycleNotification("session.updated", sessionId);
-    this.sendRpcResponse(id, { messageId });
+
+    const acpRequestId = `acp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    this.acpIdToCopilotId.set(acpRequestId, id);
+    this.acpIdToSessionId.set(acpRequestId, sessionId);
+    this.responseBuffer = "";
+    const acpEnvelope = {
+      jsonrpc: "2.0" as const,
+      id: acpRequestId,
+      method: "session/prompt" as const,
+      params: {
+        sessionId,
+        prompt: [{ type: "text" as const, text: prompt }],
+      },
+    };
+    this.writeToChild(acpEnvelope);
+    this.scheduleForwardTimeout(acpRequestId, id, sessionId, prompt);
+  }
+
+  private scheduleForwardTimeout(
+    acpRequestId: string,
+    copilotId: string | number,
+    sessionId: string,
+    prompt: string,
+  ): void {
+    const handle = setTimeout(() => {
+      this.forwardTimeouts.delete(acpRequestId);
+      if (!this.acpIdToCopilotId.has(acpRequestId)) {
+        return;
+      }
+      this.acpIdToCopilotId.delete(acpRequestId);
+      this.acpIdToSessionId.delete(acpRequestId);
+      this.pendingRequestIds.delete(acpRequestId);
+      this.sendRpcResponse(copilotId, { messageId: `msg_${Date.now()}` });
+      const assistantEvent = this.makeCopilotEvent("assistant.message", {
+        messageId: `msg_${Date.now()}`,
+        content: `Mesh received: ${prompt}`,
+      });
+      this.appendCopilotEvent(sessionId, assistantEvent);
+      this.sendSessionEventNotification(sessionId, assistantEvent);
+      this.appendCopilotEvent(sessionId, this.makeCopilotEvent("session.idle", {}, true));
+      this.sendLifecycleNotification("session.updated", sessionId);
+    }, BridgeEngine.FORWARD_RESPONSE_TIMEOUT_MS);
+    this.forwardTimeouts.set(acpRequestId, handle);
+  }
+
+  private clearForwardTimeout(acpRequestId: string | number): void {
+    const handle = this.forwardTimeouts.get(acpRequestId);
+    if (handle !== undefined) {
+      clearTimeout(handle);
+      this.forwardTimeouts.delete(acpRequestId);
+    }
   }
 
   private handleCopilotGetMessages(id: string | number, params: Record<string, unknown>): void {

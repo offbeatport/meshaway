@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import net from "node:net";
 import path from "node:path";
 import { serve } from "@hono/node-server";
@@ -7,6 +8,13 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { ObserverEvent, PermissionDecision } from "../types.js";
 import { ObserverEventBus } from "./events.js";
+
+// CJS bundle sets globalThis.__meshImportMetaUrl in banner; else fallback so we never touch import.meta (avoids esbuild CJS warning).
+const require = createRequire(
+  typeof globalThis.__meshImportMetaUrl === "string"
+    ? globalThis.__meshImportMetaUrl
+    : "file://" + process.cwd() + "/",
+);
 
 export interface ObserverServerOptions {
   eventBus: ObserverEventBus;
@@ -108,6 +116,19 @@ export async function startObserverServer(options: ObserverServerOptions): Promi
 }
 
 async function loadUiAssets(): Promise<{ dashboardJs: string; css: string }> {
+  try {
+    const sea = require("node:sea") as { isSea?: () => boolean; getAsset?: (key: string, encoding?: string) => string };
+    if (sea?.isSea?.() && typeof sea.getAsset === "function") {
+      const dashboardJs = sea.getAsset("ui/dashboard.js", "utf8");
+      const css = sea.getAsset("ui/index.css", "utf8");
+      if (dashboardJs && css) {
+        return { dashboardJs, css };
+      }
+    }
+  } catch {
+    // Not running inside a Single Executable Application; fall through to filesystem.
+  }
+
   const candidates = [
     process.env.MESHAWAY_UI_ASSET_DIR,
     path.resolve(process.cwd(), "dist", "ui"),
