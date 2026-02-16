@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { redactSecrets } from "../src/logging.js";
+import { redactSecrets } from "../../src/logging.js";
 
 test("redacts API keys and token assignments", () => {
   const source = "ANTHROPIC_API_KEY=abcd1234 sk-live-super-secret ghp_12345678901234567890";

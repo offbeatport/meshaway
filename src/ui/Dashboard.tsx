@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Dialog } from "@base-ui/react";
-import { Brain, FileText, ShieldAlert, Terminal } from "lucide-react";
+import { Collapsible, Dialog, Tabs } from "@base-ui/react";
+import { Brain, ChevronDown, FileText, ShieldAlert, Terminal } from "lucide-react";
 
 type ActionStatus = "pending" | "approved" | "success" | "failed";
 
 interface ThoughtEntry {
   id: string;
   content: string;
+  summary: string;
+  rawJson: string;
   timestamp: number;
 }
 
@@ -23,6 +25,14 @@ interface PermissionEntry {
   title: string;
   command: string;
   risk: "low" | "medium" | "high";
+}
+
+interface SessionHistoryEntry {
+  id: string;
+  type: string;
+  summary: string;
+  rawJson: string;
+  timestamp: number;
 }
 
 declare global {
@@ -54,6 +64,7 @@ function Dashboard(): React.JSX.Element {
   const [thoughts, setThoughts] = useState<ThoughtEntry[]>([]);
   const [actions, setActions] = useState<ActionEntry[]>([]);
   const [pendingPermissions, setPendingPermissions] = useState<PermissionEntry[]>([]);
+  const [history, setHistory] = useState<SessionHistoryEntry[]>([]);
 
   useEffect(() => {
     if (!config) {
@@ -68,12 +79,26 @@ function Dashboard(): React.JSX.Element {
           payload: Record<string, unknown>;
         };
         if (incoming.type === "thought_chunk") {
+          const rawJson = JSON.stringify(incoming, null, 2);
+          const content = maskSensitive(String(incoming.payload.content ?? ""));
           const entry: ThoughtEntry = {
             id: String(incoming.payload.id ?? `${Date.now()}`),
-            content: maskSensitive(String(incoming.payload.content ?? "")),
+            content,
+            summary: content.length > 88 ? `${content.slice(0, 88)}...` : content,
+            rawJson,
             timestamp: Number(incoming.payload.timestamp ?? Date.now()),
           };
           setThoughts((prev) => [...prev.slice(-199), entry]);
+          setHistory((prev) => [
+            ...prev.slice(-399),
+            {
+              id: `h_${entry.id}`,
+              type: incoming.type,
+              summary: entry.summary || "Agent thought chunk",
+              rawJson,
+              timestamp: entry.timestamp,
+            },
+          ]);
           return;
         }
 
@@ -93,6 +118,16 @@ function Dashboard(): React.JSX.Element {
             copy[index] = next;
             return copy;
           });
+          setHistory((prev) => [
+            ...prev.slice(-399),
+            {
+              id: `h_${next.id}_${Date.now()}`,
+              type: incoming.type,
+              summary: `${incoming.type}: ${next.command} (${next.status})`,
+              rawJson: JSON.stringify(incoming, null, 2),
+              timestamp: next.timestamp,
+            },
+          ]);
           return;
         }
 
@@ -104,12 +139,32 @@ function Dashboard(): React.JSX.Element {
             risk: (incoming.payload.risk as PermissionEntry["risk"]) ?? "medium",
           };
           setPendingPermissions((prev) => [...prev, item]);
+          setHistory((prev) => [
+            ...prev.slice(-399),
+            {
+              id: `h_perm_${item.id}_${Date.now()}`,
+              type: incoming.type,
+              summary: `permission requested: ${item.command}`,
+              rawJson: JSON.stringify(incoming, null, 2),
+              timestamp: Date.now(),
+            },
+          ]);
           return;
         }
 
         if (incoming.type === "permission_resolved") {
           const id = String(incoming.payload.id ?? "");
           setPendingPermissions((prev) => prev.filter((permission) => permission.id !== id));
+          setHistory((prev) => [
+            ...prev.slice(-399),
+            {
+              id: `h_res_${id}_${Date.now()}`,
+              type: incoming.type,
+              summary: `permission resolved: ${id}`,
+              rawJson: JSON.stringify(incoming, null, 2),
+              timestamp: Date.now(),
+            },
+          ]);
         }
       } catch {
         // Ignore malformed events to keep dashboard responsive.
@@ -123,6 +178,7 @@ function Dashboard(): React.JSX.Element {
 
   const latestThoughts = useMemo(() => thoughts.slice(-80).reverse(), [thoughts]);
   const latestActions = useMemo(() => actions.slice(-40).reverse(), [actions]);
+  const latestHistory = useMemo(() => history.slice(-120).reverse(), [history]);
   const activePermission = pendingPermissions[0];
 
   const resolvePermission = async (id: string, decision: "approved" | "denied"): Promise<void> => {
@@ -159,21 +215,71 @@ function Dashboard(): React.JSX.Element {
 
       <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <article className="xl:col-span-2 border border-zinc-800 rounded-xl p-4 bg-zinc-900/40">
-          <div className="flex items-center gap-2 mb-3">
-            <Brain className="w-4 h-4 text-zinc-300" />
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-300">The Thought Stream</h2>
-          </div>
-          <div className="h-[26rem] overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
-            {latestThoughts.length === 0 ? (
-              <p className="text-zinc-500 text-xs">No thought events yet.</p>
-            ) : (
-              latestThoughts.map((thought) => (
-                <p key={thought.id} className="text-xs text-zinc-200 whitespace-pre-wrap break-words font-mono">
-                  {thought.content}
-                </p>
-              ))
-            )}
-          </div>
+          <Tabs.Root defaultValue="live">
+            <Tabs.List className="mb-3 inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1 gap-1">
+              <Tabs.Tab
+                value="live"
+                className="rounded px-3 py-1.5 text-xs text-zinc-300 data-[selected]:bg-zinc-800 data-[selected]:text-zinc-100"
+              >
+                Live Interceptions
+              </Tabs.Tab>
+              <Tabs.Tab
+                value="history"
+                className="rounded px-3 py-1.5 text-xs text-zinc-300 data-[selected]:bg-zinc-800 data-[selected]:text-zinc-100"
+              >
+                Session History
+              </Tabs.Tab>
+            </Tabs.List>
+
+            <Tabs.Panel value="live" keepMounted>
+              <div className="flex items-center gap-2 mb-3">
+                <Brain className="w-4 h-4 text-zinc-300" />
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-300">The Thought Stream</h2>
+              </div>
+              <div className="h-[26rem] overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
+                {latestThoughts.length === 0 ? (
+                  <p className="text-zinc-500 text-xs">No thought events yet.</p>
+                ) : (
+                  latestThoughts.map((thought) => (
+                    <Collapsible.Root key={thought.id} className="rounded border border-zinc-800 bg-zinc-900/40">
+                      <Collapsible.Trigger className="w-full flex items-center justify-between px-3 py-2 text-left">
+                        <span className="text-xs text-zinc-200 font-mono break-words">{thought.summary || "Thought block"}</span>
+                        <ChevronDown className="h-4 w-4 text-zinc-500" />
+                      </Collapsible.Trigger>
+                      <Collapsible.Panel className="px-3 pb-3 space-y-2">
+                        <p className="text-xs text-zinc-300 whitespace-pre-wrap break-words font-mono">{thought.content}</p>
+                        <pre className="text-[11px] text-zinc-400 whitespace-pre-wrap break-words font-mono border border-zinc-800 rounded p-2 bg-zinc-950">
+{thought.rawJson}
+                        </pre>
+                      </Collapsible.Panel>
+                    </Collapsible.Root>
+                  ))
+                )}
+              </div>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="history">
+              <div className="h-[26rem] overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 space-y-2">
+                {latestHistory.length === 0 ? (
+                  <p className="text-zinc-500 text-xs">No session history yet.</p>
+                ) : (
+                  latestHistory.map((entry) => (
+                    <Collapsible.Root key={entry.id} className="rounded border border-zinc-800 bg-zinc-900/40">
+                      <Collapsible.Trigger className="w-full flex items-center justify-between px-3 py-2 text-left">
+                        <span className="text-xs text-zinc-200 font-mono break-words">{entry.summary}</span>
+                        <ChevronDown className="h-4 w-4 text-zinc-500" />
+                      </Collapsible.Trigger>
+                      <Collapsible.Panel className="px-3 pb-3">
+                        <pre className="text-[11px] text-zinc-400 whitespace-pre-wrap break-words font-mono border border-zinc-800 rounded p-2 bg-zinc-950">
+{entry.rawJson}
+                        </pre>
+                      </Collapsible.Panel>
+                    </Collapsible.Root>
+                  ))
+                )}
+              </div>
+            </Tabs.Panel>
+          </Tabs.Root>
         </article>
 
         <aside className="space-y-4">

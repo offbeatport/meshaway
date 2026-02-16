@@ -46,6 +46,36 @@ export function createProgram(): Command {
   return program;
 }
 
+export async function runCompatFromRawArgs(rawArgs: string[]): Promise<boolean> {
+  const hasCopilotServerFlags = rawArgs.includes("--stdio") || rawArgs.includes("--headless");
+  const hasSubcommand = rawArgs.some((arg) => arg === "start" || arg === "ui" || arg === "help");
+  if (!hasCopilotServerFlags || hasSubcommand) {
+    return false;
+  }
+
+  const getOption = (name: string): string | undefined => {
+    const index = rawArgs.findIndex((arg) => arg === name);
+    if (index === -1 || index + 1 >= rawArgs.length) {
+      return undefined;
+    }
+    const candidate = rawArgs[index + 1];
+    return candidate.startsWith("--") ? undefined : candidate;
+  };
+
+  await runBridge(
+    {
+      mode: (getOption("--mode") as MeshMode | undefined) ?? "github",
+      clientType: (getOption("--client-type") as MeshMode | undefined) ?? "github",
+      agentCommand: getOption("--agent-command") ?? "cat",
+      agentArg: [],
+      cwd: getOption("--cwd") ?? process.cwd(),
+    },
+    false,
+  );
+
+  return true;
+}
+
 async function runBridge(options: RuntimeOptions, withUi: boolean): Promise<void> {
   const eventBus = new ObserverEventBus();
   const engine = new BridgeEngine({

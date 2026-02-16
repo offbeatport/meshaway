@@ -6,7 +6,7 @@ await build({
   platform: "node",
   target: "node20",
   format: "cjs",
-  outfile: "dist/meshaway.js",
+  outfile: "dist/meshaway.cjs",
   banner: {
     js: "#!/usr/bin/env node",
   },

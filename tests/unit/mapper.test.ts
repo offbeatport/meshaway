@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { UnifiedTranslator } from "../src/mapper.js";
+import { UnifiedTranslator } from "../../src/mapper.js";
 
 test("maps claude thought into ACP metadata", () => {
   const mapper = new UnifiedTranslator();

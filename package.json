@@ -1,17 +1,19 @@
 {
   "name": "meshaway",
   "version": "0.1.0",
-  "description": "Local multi-client bridge that normalizes GitHub/Claude streams to ACP.",
+  "description": "The Universal SDK Bridge for AI Agents. ",
   "type": "module",
   "bin": {
-    "mesh": "./dist/meshaway.js"
+    "mesh": "./dist/meshaway.cjs"
   },
   "scripts": {
     "build": "node ./esbuild.config.mjs && node ./scripts/build-ui-assets.mjs",
     "dev": "tsx src/index.ts",
-    "start": "node dist/meshaway.js",
+    "start": "node dist/meshaway.cjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --import tsx ./tests/**/*.test.ts",
+    "test": "node --test --import tsx ./tests/unit/**/*.test.ts ./tests/integration/**/*.test.ts",
+    "test:unit": "node --test --import tsx ./tests/unit/**/*.test.ts",
+    "test:integration": "node --test --import tsx ./tests/integration/**/*.test.ts",
     "smoke": "tsx ./tests/smoke.ts",
     "build:native": "npm run build && pkg . --targets node18-macos-arm64 --output release/mesh"
   },
@@ -35,6 +37,8 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.42",
+    "@github/copilot-sdk": "^0.1.23",
     "@types/node": "^24.3.3",
     "@types/react": "^19.1.11",
     "@types/react-dom": "^19.1.7",
@@ -47,7 +51,7 @@
       "dist/ui/**/*"
     ],
     "scripts": [
-      "dist/meshaway.js"
+      "dist/meshaway.cjs"
     ],
     "targets": [
       "node18-macos-arm64"
