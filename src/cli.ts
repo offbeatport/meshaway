@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { spawn } from "node:child_process";
-import { BridgeEngine } from "./bridge.js";
+import { BridgeEngine } from "./bridge/index.js";
 import type { MeshMode, Provider } from "./types.js";
 import { ObserverEventBus } from "./ui/events.js";
 import { startObserverServer } from "./ui/server.js";

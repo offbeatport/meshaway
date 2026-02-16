@@ -10,10 +10,9 @@ import type { ObserverEvent, PermissionDecision } from "../types.js";
 import { ObserverEventBus } from "./events.js";
 
 // CJS bundle sets globalThis.__meshImportMetaUrl in banner; else fallback so we never touch import.meta (avoids esbuild CJS warning).
+const g = globalThis as { __meshImportMetaUrl?: string };
 const require = createRequire(
-  typeof globalThis.__meshImportMetaUrl === "string"
-    ? globalThis.__meshImportMetaUrl
-    : "file://" + process.cwd() + "/",
+  typeof g.__meshImportMetaUrl === "string" ? g.__meshImportMetaUrl : "file://" + process.cwd() + "/",
 );
 
 export interface ObserverServerOptions {
