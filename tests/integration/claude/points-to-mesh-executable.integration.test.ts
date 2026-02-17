@@ -4,8 +4,8 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 
 // Mesh currently speaks Copilot JSON-RPC only; Claude SDK expects a different stdio protocol.
-// Skip until mesh implements Claude Code CLI transport.
-test.skip("existing Claude SDK app can point pathToClaudeCodeExecutable to mesh executable", async () => {
+// Skip until meshaway implements Claude Code CLI transport.
+test.skip("existing Claude SDK app can point pathToClaudeCodeExecutable to meshaway executable", async () => {
   const fixturePath = path.resolve(
     process.cwd(),
     "tests",

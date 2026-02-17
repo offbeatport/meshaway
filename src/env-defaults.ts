@@ -1,4 +1,4 @@
-/** Environment variable defaults for mesh CLI (meshaway-cli-v1). */
+/** Environment variable defaults for meshaway CLI (meshaway-cli-v1). */
 export const MESHAWAY_ENV = {
   GATEWAY: "MESHAWAY_GATEWAY",
   TOKEN: "MESHAWAY_TOKEN",

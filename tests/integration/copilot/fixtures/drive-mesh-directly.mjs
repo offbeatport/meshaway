@@ -1,5 +1,5 @@
 /**
- * Drives the mesh with the same JSON-RPC sequence as the Copilot SDK
+ * Drives the meshaway CLI with the same JSON-RPC sequence as the Copilot SDK
  * (Content-Length framing). Used to verify the bridge sends session.idle.
  */
 import { spawn } from "node:child_process";

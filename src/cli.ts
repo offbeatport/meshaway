@@ -126,11 +126,11 @@ async function runBridge(options: RuntimeOptions, withUi: boolean): Promise<void
 export function createProgram(): Command {
   const program = new Command();
   program
-    .name("mesh")
+    .name("meshaway")
     .description("Meshaway CLI — stdio adapter (default), gateway (serve), status, logs, config")
     .version("0.1.0");
 
-  // ---- Default: stdio adapter (mesh [options]) ----
+  // ---- Default: stdio adapter (meshaway [options]) ----
   program
     .option("--server <url>", "Forward all traffic to a running server")
     .option("--token <token>", "Auth token for connecting to a remote gateway")
@@ -149,7 +149,7 @@ export function createProgram(): Command {
     .action(async (opts: Record<string, string | undefined>) => {
       const server = opts.server ?? getEnv("GATEWAY");
       if (server) {
-        process.stderr.write("Forwarding to gateway is not yet implemented. Use local stdio or run `mesh serve`.\n");
+        process.stderr.write("Forwarding to gateway is not yet implemented. Use local stdio or run `meshaway serve`.\n");
         exit(EXIT.GATEWAY_FAILURE);
       }
 
@@ -176,7 +176,7 @@ export function createProgram(): Command {
       );
     });
 
-  // ---- mesh serve ----
+  // ---- meshaway serve ----
   const serveCmd = program
     .command("serve")
     .description("Start the Meshaway gateway for remote SDKs and stdio shims")
@@ -225,7 +225,7 @@ export function createProgram(): Command {
       }
     });
 
-  // ---- mesh serve ui ----
+  // ---- meshaway serve ui ----
   const serveUiCmd = serveCmd
     .command("ui")
     .description("Start the gateway plus web dashboard")
@@ -238,55 +238,32 @@ export function createProgram(): Command {
       const { host, port } = parseListen(listen);
       const doOpen = (opts as { open?: boolean }).open ?? false;
 
-    const eventBus = new ObserverEventBus();
-    const engine = new BridgeEngine({
-      mode: "auto",
-      clientType: "github",
-      provider: "github",
-      agentCommand: "cat",
-      agentArgs: [],
-      cwd: process.cwd(),
-      eventBus,
+      const eventBus = new ObserverEventBus();
+      const engine = new BridgeEngine({
+        mode: "auto",
+        clientType: "github",
+        provider: "github",
+        agentCommand: "cat",
+        agentArgs: [],
+        cwd: process.cwd(),
+        eventBus,
+      });
+
+      const observer = await startObserverServer({
+        eventBus,
+        onPermissionDecision: (id, decision) => engine.resolvePermission({ id, decision }),
+        listenHost: host,
+        listenPort: port,
+      });
+
+      const url = `http://${host}:${observer.port}?token=${observer.token}`;
+      process.stderr.write(`Gateway + UI at ${url}\n`);
+      if (doOpen) openBrowser(url);
+      engine.start();
+
+      await new Promise<void>(() => { });
     });
 
-    const observer = await startObserverServer({
-      eventBus,
-      onPermissionDecision: (id, decision) => engine.resolvePermission({ id, decision }),
-      listenHost: host,
-      listenPort: port,
-    });
-
-    const url = `http://${host}:${observer.port}?token=${observer.token}`;
-    process.stderr.write(`Gateway + UI at ${url}\n`);
-    if (doOpen) openBrowser(url);
-    engine.start();
-
-    await new Promise<void>(() => {});
-  });
-
-  // Backward compatibility: mesh start (same as default), mesh ui (bridge + observer)
-  program
-    .command("start")
-    .description("Run the bridge over stdio (alias for default)")
-    .option("--mode <mode>", "Input mode", "auto")
-    .option("--client-type <type>", "Output translation", "auto")
-    .option("--provider <provider>", "Agent provider", "github")
-    .option("--agent-command <command>", "Child ACP agent command", "cat")
-    .option("--agent-arg <arg...>", "Arguments for child", [])
-    .option("--cwd <cwd>", "Working directory")
-    .action(async (opts: Record<string, string | undefined>) => {
-      await runBridge(
-        {
-          mode: (opts.mode ?? "auto") as MeshMode,
-          clientType: (opts.clientType ?? "auto") as MeshMode,
-          provider: (opts.provider ?? "github") as Provider,
-          agentCommand: opts.agentCommand ?? "cat",
-          agentArg: stripCopilotArgs(Array.isArray(opts.agentArg) ? opts.agentArg : []),
-          cwd: opts.cwd ?? process.cwd(),
-        },
-        false,
-      );
-    });
 
   program
     .command("ui")
@@ -313,7 +290,7 @@ export function createProgram(): Command {
       );
     });
 
-  // ---- mesh status ----
+  // ---- meshaway status ----
   program
     .command("status")
     .description("Show runtime and connectivity")
@@ -326,7 +303,7 @@ export function createProgram(): Command {
       }
     });
 
-  // ---- mesh logs ----
+  // ---- meshaway logs ----
   program
     .command("logs")
     .description("Tail logs")
@@ -337,7 +314,7 @@ export function createProgram(): Command {
       process.stderr.write("Log aggregation not yet implemented. Use --log-level for process output.\n");
     });
 
-  // ---- mesh config ----
+  // ---- meshaway config ----
   const configDataDir = () => {
     const args = process.argv.slice(2);
     const idx = args.indexOf("--data-dir");

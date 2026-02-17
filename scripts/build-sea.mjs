@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const isWindows = process.platform === "win32";
-const outputName = isWindows ? "release/mesh.exe" : "release/mesh";
+const outputName = isWindows ? "release/meshaway.exe" : "release/meshaway";
 const blobName = "sea-prep.blob";
 
 const releaseDir = path.join(root, "release");

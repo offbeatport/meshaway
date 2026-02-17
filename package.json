@@ -4,7 +4,7 @@
   "description": "The Universal SDK Bridge for AI Agents. ",
   "type": "module",
   "bin": {
-    "mesh": "./dist/meshaway.cjs"
+    "meshaway": "./dist/meshaway.cjs"
   },
   "scripts": {
     "build": "node ./esbuild.config.mjs && node ./scripts/build-ui-assets.mjs",

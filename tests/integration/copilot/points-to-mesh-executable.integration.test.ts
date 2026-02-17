@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
-test("existing Copilot SDK app can point cliPath to mesh executable", async () => {
+test("existing Copilot SDK app can point cliPath to meshaway executable", async () => {
   const fixturePath = path.resolve(
     process.cwd(),
     "tests",
