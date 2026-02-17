@@ -1,53 +1,42 @@
-import { z } from "zod";
+import { type } from "arktype";
 
-export const GithubJsonRpcEnvelopeSchema = z
-  .object({
-    jsonrpc: z.literal("2.0"),
-    id: z.union([z.string(), z.number()]).optional(),
-    method: z.string().optional(),
-    params: z.unknown().optional(),
-    result: z.unknown().optional(),
-    error: z
-      .object({
-        code: z.number(),
-        message: z.string(),
-        data: z.unknown().optional(),
-      })
-      .passthrough()
-      .optional(),
-  })
-  .passthrough();
+export const GithubJsonRpcEnvelopeSchema = type({
+  jsonrpc: "'2.0'",
+  "id?": "string | number",
+  "method?": "string",
+  "params?": "unknown",
+  "result?": "unknown",
+  "error?": {
+    code: "number",
+    message: "string",
+    "data?": "unknown",
+  },
+});
 
-export const GithubPromptParamsSchema = z
-  .object({
-    prompt: z.string().optional(),
-    context: z.array(z.record(z.string(), z.unknown())).optional(),
-    sessionId: z.string().optional(),
-  })
-  .passthrough();
+export const GithubPromptParamsSchema = type({
+  "prompt?": "string",
+  "context?": "Record<string, unknown>[]",
+  "sessionId?": "string",
+});
 
-export const GithubToolUseSchema = z
-  .object({
-    type: z.literal("tool_use"),
-    toolName: z.string().optional(),
-    command: z.string().optional(),
-    arguments: z.record(z.string(), z.unknown()).optional(),
-  })
-  .passthrough();
+export const GithubToolUseSchema = type({
+  type: "'tool_use'",
+  "toolName?": "string",
+  "command?": "string",
+  "arguments?": "Record<string, unknown>",
+});
 
-export const GithubTokenStreamSchema = z
-  .object({
-    type: z.literal("token_stream"),
-    delta: z.string().optional(),
-    done: z.boolean().optional(),
-  })
-  .passthrough();
+export const GithubTokenStreamSchema = type({
+  type: "'token_stream'",
+  "delta?": "string",
+  "done?": "boolean",
+});
 
-export const GithubMessageSchema = z.union([
+export const GithubMessageSchema = type.or(
   GithubJsonRpcEnvelopeSchema,
   GithubPromptParamsSchema,
   GithubToolUseSchema,
   GithubTokenStreamSchema,
-]);
+);
 
-export type GithubMessage = z.infer<typeof GithubMessageSchema>;
+export type GithubMessage = typeof GithubMessageSchema.infer;
