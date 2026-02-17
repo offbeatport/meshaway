@@ -17,10 +17,10 @@ import {
   type ConfigKey,
 } from "./config.js";
 import {
-  startGatewayServer,
+  startServer,
   parseListen,
-  type GatewayServeOptions,
-} from "./gateway/server.js";
+  type ServerServeOptions,
+} from "./server/server.js";
 
 /** Copilot/SDK-specific flags to strip before passing args to the ACP child agent. */
 const COPILOT_STRIP_FLAGS = [
@@ -54,23 +54,6 @@ function stripCopilotArgs(args: string[]): string[] {
     i += 1;
   }
   return out;
-}
-
-interface StdioOptions {
-  server?: string;
-  token?: string;
-  protocol: "auto" | "copilot" | "acp";
-  agent: string;
-  connectTimeout?: number;
-  requestTimeout: number;
-  logLevel: string;
-  logFormat: "text" | "json";
-  mode: MeshMode;
-  clientType: MeshMode;
-  provider: Provider;
-  agentCommand: string;
-  agentArgs: string[];
-  cwd: string;
 }
 
 interface RuntimeOptions {
@@ -127,15 +110,16 @@ export function createProgram(): Command {
   const program = new Command();
   program
     .name("meshaway")
-    .description("Meshaway CLI — stdio adapter (default), gateway (serve), status, logs, config")
-    .version("0.1.0");
+    .description("Meshaway CLI — stdio adapter (default), server (serve), status, logs, config")
+    .version("0.1.0")
+    .allowExcessArguments(true);
 
   // ---- Default: stdio adapter (meshaway [options]) ----
   program
     .option("--server <url>", "Forward all traffic to a running server")
-    .option("--token <token>", "Auth token for connecting to a remote gateway")
+    .option("--token <token>", "Auth token for connecting to a remote server")
     .option("--protocol <auto|copilot|acp>", "Protocol to speak on stdio", "auto")
-    .option("--agent <name>", "Default backend route when not using a gateway")
+    .option("--agent <name>", "Default backend route when not using a server")
     .option("--connect-timeout <ms>", "Connection timeout in ms")
     .option("--request-timeout <ms>", "Request timeout in ms", "60000")
     .option("--log-level <level>", "Log level: error, warn, info, debug", "info")
@@ -147,21 +131,26 @@ export function createProgram(): Command {
     .option("--agent-arg <arg...>", "Arguments passed to child command", [])
     .option("--cwd <cwd>", "Working directory for child process")
     .action(async (opts: Record<string, string | undefined>) => {
+      const excess = program.args?.length ? program.args : [];
+      if (excess.length > 0) {
+        process.stderr.write(`Unknown command '${excess[0]}'. See meshaway --help.\n`);
+        exit(EXIT.INVALID_ARGS);
+      }
       if (process.stdin.isTTY) {
         process.stdout.write(
           "meshaway is typically run by SDKs over stdio (stdin/stdout).\n" +
-            "For interactive usage, try: meshaway --help\n" +
-            "  meshaway serve       — start the gateway\n" +
-            "  meshaway serve --ui — gateway + dashboard\n" +
-            "  meshaway status     — show runtime and connectivity\n",
+          "For interactive usage, try: meshaway --help\n" +
+          "  meshaway serve       — start the server\n" +
+          "  meshaway serve --ui — server + dashboard\n" +
+          "  meshaway status     — show runtime and connectivity\n",
         );
         exit(EXIT.SUCCESS);
       }
 
-      const server = opts.server ?? getEnv("GATEWAY");
+      const server = opts.server ?? getEnv("SERVER");
       if (server) {
-        process.stderr.write("Forwarding to gateway is not yet implemented. Use local stdio or run `meshaway serve`.\n");
-        exit(EXIT.GATEWAY_FAILURE);
+        process.stderr.write("Forwarding to server is not yet implemented. Use local stdio or run `meshaway serve`.\n");
+        exit(EXIT.SERVER_FAILURE);
       }
 
       const protocol = (opts.protocol ?? getEnv("MODE") ?? "auto") as "auto" | "copilot" | "acp";
@@ -190,9 +179,9 @@ export function createProgram(): Command {
   // ---- meshaway serve ----
   program
     .command("serve")
-    .description("Start the Meshaway gateway for remote SDKs and stdio shims")
+    .description("Start the Meshaway server for remote SDKs and stdio shims")
     .option("--listen <host:port>", "Listen address", "127.0.0.1:7777")
-    .option("--ui", "Start gateway with web dashboard")
+    .option("--ui", "Start server with web dashboard")
     .option("--no-open", "Do not open dashboard in browser (use with --ui)")
     .option("--public-url <url>", "Public URL for snippets")
     .option("--auth <type>", "Auth: none, token, oidc, mtls", "none")
@@ -202,7 +191,7 @@ export function createProgram(): Command {
     .option("--insecure", "Allow insecure (warn loudly)")
     .option("--data-dir <path>", "Data directory", "~/.meshaway")
     .option("--log-level <level>", "Log level", "info")
-    .action(async (opts: Record<string, string | undefined>) => {
+    .action(async (opts: Record<string, string | boolean | undefined>) => {
       const withUi = opts.ui === true;
       const doOpen = opts.open !== false;
       const listen = typeof opts.listen === "string" ? opts.listen : "127.0.0.1:7777";
@@ -228,16 +217,16 @@ export function createProgram(): Command {
         });
 
         const url = `http://${host}:${observer.port}?token=${observer.token}`;
-        process.stderr.write(`Gateway + UI at ${url}\n`);
+        process.stderr.write(`Server + UI at ${url}\n`);
         if (doOpen) openBrowser(url);
         engine.start();
 
-        await new Promise<void>(() => {});
+        await new Promise<void>(() => { });
       } else {
-        const auth = (typeof opts.auth === "string" ? opts.auth : "none") as GatewayServeOptions["auth"];
+        const auth = (typeof opts.auth === "string" ? opts.auth : "none") as ServerServeOptions["auth"];
         const token = typeof opts.token === "string" ? opts.token : undefined;
 
-        const gatewayOptions: GatewayServeOptions = {
+        const serverOptions: ServerServeOptions = {
           host,
           port,
           auth,
@@ -246,8 +235,8 @@ export function createProgram(): Command {
         };
 
         try {
-          const handle = await startGatewayServer(gatewayOptions);
-          process.stderr.write(`Gateway listening on http://${handle.host}:${handle.port}\n`);
+          const handle = await startServer(serverOptions);
+          process.stderr.write(`Server listening on http://${handle.host}:${handle.port}\n`);
           process.stderr.write("Press Ctrl+C to stop.\n");
           await new Promise<void>((_, reject) => {
             process.on("SIGINT", () => {
@@ -259,7 +248,7 @@ export function createProgram(): Command {
           });
         } catch (err) {
           process.stderr.write(String(err) + "\n");
-          exit(EXIT.GATEWAY_FAILURE);
+          exit(EXIT.SERVER_FAILURE);
         }
       }
     });
@@ -295,9 +284,9 @@ export function createProgram(): Command {
     .command("status")
     .description("Show runtime and connectivity")
     .action(async () => {
-      const gateway = getEnv("GATEWAY");
-      if (gateway) {
-        process.stdout.write(JSON.stringify({ gateway, mode: "client" }, null, 2) + "\n");
+      const serverUrl = getEnv("SERVER");
+      if (serverUrl) {
+        process.stdout.write(JSON.stringify({ server: serverUrl, mode: "client" }, null, 2) + "\n");
       } else {
         process.stdout.write(JSON.stringify({ mode: "stdio" }, null, 2) + "\n");
       }
@@ -324,7 +313,7 @@ export function createProgram(): Command {
 
   const configCmd = program
     .command("config")
-    .description("Manage config (gateway.url, gateway.token, default.agent, log.level)")
+    .description("Manage config (server.url, server.token, default.agent, log.level)")
     .option("--data-dir <path>", "Config/data directory", "~/.meshaway");
 
   configCmd
@@ -334,7 +323,7 @@ export function createProgram(): Command {
     .action(async (key: string) => {
       const dataDir = configDataDir();
       if (!isConfigKey(key)) {
-        process.stderr.write(`Unknown key. Suggested: gateway.url, gateway.token, default.agent, log.level\n`);
+        process.stderr.write(`Unknown key. Suggested: server.url, server.token, default.agent, log.level\n`);
         exit(EXIT.INVALID_ARGS);
       }
       const value = await configGet(dataDir, key);
@@ -348,7 +337,7 @@ export function createProgram(): Command {
     .action(async (key: string, value: string) => {
       const dataDir = configDataDir();
       if (!isConfigKey(key)) {
-        process.stderr.write(`Unknown key. Suggested: gateway.url, gateway.token, default.agent, log.level\n`);
+        process.stderr.write(`Unknown key. Suggested: server.url, server.token, default.agent, log.level\n`);
         exit(EXIT.INVALID_ARGS);
       }
       await configSet(dataDir, key as ConfigKey, value);

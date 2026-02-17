@@ -3,7 +3,7 @@ export const EXIT = {
   SUCCESS: 0,
   GENERIC_ERROR: 1,
   INVALID_ARGS: 2,
-  GATEWAY_FAILURE: 3,
+  SERVER_FAILURE: 3,
   BACKEND_FAILURE: 4,
 } as const;
 

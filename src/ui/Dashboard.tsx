@@ -312,7 +312,7 @@ function Dashboard(): React.JSX.Element {
           <Dialog.Popup className="fixed left-1/2 top-1/2 w-[min(30rem,92vw)] -translate-x-1/2 -translate-y-1/2 border border-zinc-800 rounded-xl bg-zinc-900 p-4 shadow-xl">
             <Dialog.Title className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-300" />
-              Permission Gateway
+              Permission Server
             </Dialog.Title>
             <Dialog.Description className="mt-2 text-xs text-zinc-300">
               {activePermission?.title}

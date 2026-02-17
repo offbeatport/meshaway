@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 
-export interface GatewayServeOptions {
+export interface ServerServeOptions {
   host: string;
   port: number;
   auth: "none" | "token" | "oidc" | "mtls";
@@ -34,19 +34,19 @@ export function parseListen(listen: string): { host: string; port: number } {
   return { host, port };
 }
 
-export interface GatewayServerHandle {
+export interface ServerHandle {
   port: number;
   host: string;
   close: () => Promise<void>;
 }
 
 /**
- * Start the Meshaway gateway (minimal HTTP server for remote SDKs and stdio shims).
+ * Start the Meshaway server (minimal HTTP server for remote SDKs and stdio shims).
  */
-export async function startGatewayServer(options: GatewayServeOptions): Promise<GatewayServerHandle> {
+export async function startServer(options: ServerServeOptions): Promise<ServerHandle> {
   const app = new Hono();
 
-  app.get("/", (c) => c.json({ gateway: true, version: "0.1.0" }));
+  app.get("/", (c) => c.json({ server: true, version: "0.1.0" }));
   app.get("/health", (c) => c.json({ ok: true }));
 
   if (options.auth === "token" && options.token) {

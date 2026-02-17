@@ -14,14 +14,14 @@ export function getConfigPath(dataDir: string): string {
 }
 
 export type ConfigKey =
-  | "gateway.url"
-  | "gateway.token"
+  | "server.url"
+  | "server.token"
   | "default.agent"
   | "log.level";
 
 const CONFIG_KEYS: ConfigKey[] = [
-  "gateway.url",
-  "gateway.token",
+  "server.url",
+  "server.token",
   "default.agent",
   "log.level",
 ];
