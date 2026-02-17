@@ -177,7 +177,7 @@ export function createProgram(): Command {
   program
     .option("--server <url>", "Forward all traffic to a running server")
     .option("--token <token>", "Auth token for connecting to a remote server")
-    .option("--protocol <auto|copilot|acp>", "Protocol to speak on stdio", "auto")
+    .option("--format <auto|copilot|acp>", "Message format to speak on stdio", "auto")
     .option("--agent <name>", "Default backend route when not using a server")
     .option("--connect-timeout <ms>", "Connection timeout in ms")
     .option("--request-timeout <ms>", "Request timeout in ms", "60000")
@@ -212,20 +212,19 @@ export function createProgram(): Command {
         exit(EXIT.SERVER_FAILURE);
       }
 
-      const protocol = (opts.protocol ?? getEnv("MODE") ?? "auto") as "auto" | "copilot" | "acp";
+      const format = (opts.format ?? getEnv("MODE") ?? "auto") as "auto" | "copilot" | "acp";
       const mode = (opts.mode ?? getEnv("MODE") ?? "auto") as MeshMode;
       const clientType = (opts.clientType ?? "auto") as MeshMode;
       const provider = (opts.provider ?? "github") as Provider;
       const agentFromEnv = getEnv("AGENT");
       const agentCommand = opts.agentCommand ?? opts.agent ?? agentFromEnv ?? "cat";
-      const requestTimeout = parseInt(String(opts.requestTimeout ?? "60000"), 10) || 60000;
       const cwd = opts.cwd ?? process.cwd();
       const agentArg = Array.isArray(opts.agentArg) ? opts.agentArg : [];
 
       await runBridge(
         {
-          mode: protocol === "copilot" ? "github" : protocol === "acp" ? "auto" : mode,
-          clientType: protocol === "copilot" ? "github" : protocol === "acp" ? "claude" : clientType,
+          mode: format === "copilot" ? "github" : format === "acp" ? "auto" : mode,
+          clientType: format === "copilot" ? "github" : format === "acp" ? "claude" : clientType,
           provider,
           agentCommand,
           agentArg: stripSdkFlags(agentArg),
@@ -345,13 +344,13 @@ export function createProgram(): Command {
         configGet(dataDir, "log.level"),
       ]);
 
-      const protocol = getEnv("MODE") ?? "auto";
+      const format = getEnv("MODE") ?? "auto";
       const agent = getEnv("AGENT") ?? configAgent ?? "cat";
       const logLevel = getEnv("LOG_LEVEL") ?? configLogLevel ?? "info";
 
       const stdioStatus = {
         mode: "stdio",
-        protocol,
+        format,
         agent,
         cwd: process.cwd(),
         logLevel,
@@ -428,23 +427,8 @@ export function createProgram(): Command {
   return program;
 }
 
-/** Flags that indicate an agent SDK is invoking the CLI (stdio/headless mode). */
-const SDK_INVOCATION_FLAGS = ["--stdio", "--headless"];
 
 export async function runCompatFromRawArgs(rawArgs: string[]): Promise<boolean> {
-  const hasSdkInvocation = rawArgs.some((arg) => SDK_INVOCATION_FLAGS.includes(arg));
-  const hasSubcommand = rawArgs.some(
-    (arg) =>
-      arg === "serve" ||
-      arg === "status" ||
-      arg === "logs" ||
-      arg === "config" ||
-      arg === "ui" ||
-      arg === "start",
-  );
-  if (!hasSdkInvocation || hasSubcommand) {
-    return false;
-  }
 
   const getOption = (name: string): string | undefined => {
     const index = rawArgs.findIndex((arg) => arg === name);

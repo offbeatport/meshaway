@@ -1,10 +1,9 @@
-import { writeFileSync } from "node:fs";
-import path from "node:path";
+
 import { createProgram, runCompatFromRawArgs } from "./cli.js";
 import { EXIT, exit } from "./exit-codes.js";
 
 if (process.env.MESHAWAY_DEBUG_ARGS) {
-  process.stderr.write(`[meshaway] argv: ${JSON.stringify(process.argv)}\n`);
+  process.stderr.write(`[DEBUG ARGS] argv: ${JSON.stringify(process.argv)}\n`);
 }
 
 runCompatFromRawArgs(process.argv.slice(2))
