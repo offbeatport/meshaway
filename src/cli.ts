@@ -147,6 +147,17 @@ export function createProgram(): Command {
     .option("--agent-arg <arg...>", "Arguments passed to child command", [])
     .option("--cwd <cwd>", "Working directory for child process")
     .action(async (opts: Record<string, string | undefined>) => {
+      if (process.stdin.isTTY) {
+        process.stdout.write(
+          "meshaway is typically run by SDKs over stdio (stdin/stdout).\n" +
+            "For interactive usage, try: meshaway --help\n" +
+            "  meshaway serve       — start the gateway\n" +
+            "  meshaway serve --ui — gateway + dashboard\n" +
+            "  meshaway status     — show runtime and connectivity\n",
+        );
+        exit(EXIT.SUCCESS);
+      }
+
       const server = opts.server ?? getEnv("GATEWAY");
       if (server) {
         process.stderr.write("Forwarding to gateway is not yet implemented. Use local stdio or run `meshaway serve`.\n");
@@ -177,10 +188,12 @@ export function createProgram(): Command {
     });
 
   // ---- meshaway serve ----
-  const serveCmd = program
+  program
     .command("serve")
     .description("Start the Meshaway gateway for remote SDKs and stdio shims")
     .option("--listen <host:port>", "Listen address", "127.0.0.1:7777")
+    .option("--ui", "Start gateway with web dashboard")
+    .option("--no-open", "Do not open dashboard in browser (use with --ui)")
     .option("--public-url <url>", "Public URL for snippets")
     .option("--auth <type>", "Auth: none, token, oidc, mtls", "none")
     .option("--token <token>", "Static auth token (when --auth token)")
@@ -188,80 +201,67 @@ export function createProgram(): Command {
     .option("--tls-key <path>", "TLS key path")
     .option("--insecure", "Allow insecure (warn loudly)")
     .option("--data-dir <path>", "Data directory", "~/.meshaway")
-    .option("--log-level <level>", "Log level", "info");
-
-  serveCmd
+    .option("--log-level <level>", "Log level", "info")
     .action(async (opts: Record<string, string | undefined>) => {
-      const dataDir = opts.dataDir
-        ? path.resolve(opts.dataDir.replace(/^~/, homedir()))
-        : getDataDir();
-      const { host, port } = parseListen(opts.listen ?? "127.0.0.1:7777");
-      const auth = (opts.auth ?? "none") as GatewayServeOptions["auth"];
-      const token = opts.token;
-
-      const gatewayOptions: GatewayServeOptions = {
-        host,
-        port,
-        auth,
-        token: auth === "token" ? token : undefined,
-        publicUrl: opts.publicUrl,
-      };
-
-      try {
-        const handle = await startGatewayServer(gatewayOptions);
-        process.stderr.write(`Gateway listening on http://${handle.host}:${handle.port}\n`);
-        process.stderr.write("Press Ctrl+C to stop.\n");
-        await new Promise<void>((_, reject) => {
-          process.on("SIGINT", () => {
-            handle.close().then(() => process.exit(EXIT.SUCCESS)).catch(reject);
-          });
-          process.on("SIGTERM", () => {
-            handle.close().then(() => process.exit(EXIT.SUCCESS)).catch(reject);
-          });
-        });
-      } catch (err) {
-        process.stderr.write(String(err) + "\n");
-        exit(EXIT.GATEWAY_FAILURE);
-      }
-    });
-
-  // ---- meshaway serve ui ----
-  const serveUiCmd = serveCmd
-    .command("ui")
-    .description("Start the gateway plus web dashboard")
-    .option("--open", "Open dashboard in browser");
-
-  serveUiCmd
-    .option("--listen <host:port>", "Listen address", "127.0.0.1:7777")
-    .action(async (opts: Record<string, string | undefined>) => {
-      const listen = (opts as { listen?: string }).listen ?? "127.0.0.1:7777";
+      const withUi = opts.ui === true;
+      const doOpen = opts.open !== false;
+      const listen = typeof opts.listen === "string" ? opts.listen : "127.0.0.1:7777";
       const { host, port } = parseListen(listen);
-      const doOpen = (opts as { open?: boolean }).open ?? false;
 
-      const eventBus = new ObserverEventBus();
-      const engine = new BridgeEngine({
-        mode: "auto",
-        clientType: "github",
-        provider: "github",
-        agentCommand: "cat",
-        agentArgs: [],
-        cwd: process.cwd(),
-        eventBus,
-      });
+      if (withUi) {
+        const eventBus = new ObserverEventBus();
+        const engine = new BridgeEngine({
+          mode: "auto",
+          clientType: "github",
+          provider: "github",
+          agentCommand: "cat",
+          agentArgs: [],
+          cwd: process.cwd(),
+          eventBus,
+        });
 
-      const observer = await startObserverServer({
-        eventBus,
-        onPermissionDecision: (id, decision) => engine.resolvePermission({ id, decision }),
-        listenHost: host,
-        listenPort: port,
-      });
+        const observer = await startObserverServer({
+          eventBus,
+          onPermissionDecision: (id, decision) => engine.resolvePermission({ id, decision }),
+          listenHost: host,
+          listenPort: port,
+        });
 
-      const url = `http://${host}:${observer.port}?token=${observer.token}`;
-      process.stderr.write(`Gateway + UI at ${url}\n`);
-      if (doOpen) openBrowser(url);
-      engine.start();
+        const url = `http://${host}:${observer.port}?token=${observer.token}`;
+        process.stderr.write(`Gateway + UI at ${url}\n`);
+        if (doOpen) openBrowser(url);
+        engine.start();
 
-      await new Promise<void>(() => { });
+        await new Promise<void>(() => {});
+      } else {
+        const auth = (typeof opts.auth === "string" ? opts.auth : "none") as GatewayServeOptions["auth"];
+        const token = typeof opts.token === "string" ? opts.token : undefined;
+
+        const gatewayOptions: GatewayServeOptions = {
+          host,
+          port,
+          auth,
+          token: auth === "token" ? token : undefined,
+          publicUrl: typeof opts.publicUrl === "string" ? opts.publicUrl : undefined,
+        };
+
+        try {
+          const handle = await startGatewayServer(gatewayOptions);
+          process.stderr.write(`Gateway listening on http://${handle.host}:${handle.port}\n`);
+          process.stderr.write("Press Ctrl+C to stop.\n");
+          await new Promise<void>((_, reject) => {
+            process.on("SIGINT", () => {
+              handle.close().then(() => process.exit(EXIT.SUCCESS)).catch(reject);
+            });
+            process.on("SIGTERM", () => {
+              handle.close().then(() => process.exit(EXIT.SUCCESS)).catch(reject);
+            });
+          });
+        } catch (err) {
+          process.stderr.write(String(err) + "\n");
+          exit(EXIT.GATEWAY_FAILURE);
+        }
+      }
     });
 
 
