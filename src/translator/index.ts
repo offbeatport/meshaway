@@ -7,7 +7,7 @@ import {
 } from "./protocols/acp.js";
 import { ClaudeMessageSchema } from "./protocols/claude.js";
 import { GithubJsonRpcEnvelopeSchema } from "./protocols/github.js";
-import type { ClientType } from "./types.js";
+import type { ClientType } from "../types.js";
 
 type JsonRpcId = z.infer<typeof JsonRpcIdSchema>;
 
@@ -424,7 +424,6 @@ export class UnifiedTranslator {
   private toGithubEnvelope(normalized: z.infer<typeof NormalizedOutboundSchema>): unknown {
     switch (normalized.kind) {
       case "message_chunk":
-        // ACP session/update (agent_message_chunk) → Copilot token_stream (streaming delta; equivalent to assistant.message_delta).
         return {
           jsonrpc: "2.0",
           method: "token_stream",

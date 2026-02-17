@@ -1,4 +1,4 @@
-import { UnifiedTranslator } from "../src/mapper.js";
+import { UnifiedTranslator } from "../src/translator/index.js";
 
 const translator = new UnifiedTranslator();
 const acp = translator.githubToAcp({

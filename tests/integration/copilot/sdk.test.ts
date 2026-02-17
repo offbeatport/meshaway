@@ -1,6 +1,6 @@
 import { test, expect } from "vitest";
 import { defineTool, type SessionEvent } from "@github/copilot-sdk";
-import { UnifiedTranslator } from "../../../src/mapper.js";
+import { UnifiedTranslator } from "../../../src/translator/index.js";
 import { copilotEventToGithubRpc } from "./sdk-adapters.js";
 
 test("github copilot sdk user.message event maps to ACP session/prompt", () => {

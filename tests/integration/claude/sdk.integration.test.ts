@@ -1,6 +1,6 @@
 import { test, expect } from "vitest";
 import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { UnifiedTranslator } from "../../../src/mapper.js";
+import { UnifiedTranslator } from "../../../src/translator/index.js";
 import { claudeSdkMessageToStreamJson } from "./sdk-adapters.js";
 
 test("claude code sdk tool_use_summary message preserves thought into ACP metadata", () => {

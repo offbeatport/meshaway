@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { UnifiedTranslator } from "../mapper.js";
+import { UnifiedTranslator } from "../translator/index.js";
 import { safeLog } from "../logging.js";
 import type {
   ClientType,
@@ -9,8 +9,7 @@ import type {
 } from "../types.js";
 import type { Provider } from "../types.js";
 import { ObserverEventBus } from "../ui/events.js";
-import { asRecord, stringValue } from "./helpers.js";
-import { createCopilotHandler } from "./copilot-handler.js";
+import { asRecord } from "./helpers.js";
 import type { ObserverTrackingContext } from "./observer-tracking.js";
 import { trackInbound, trackOutbound } from "./observer-tracking.js";
 import {
@@ -22,7 +21,7 @@ import {
   type StdinParseState,
 } from "./transport.js";
 import type { PermissionRequestEvent } from "../types.js";
-import type { ICopilotHandlerEngine } from "./copilot-handler.js";
+import { createCopilotHandler, type ICopilotHandlerEngine } from "./copilot-handler.js";
 
 export interface BridgeEngineOptions {
   mode: MeshMode;

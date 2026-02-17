@@ -1,9 +1,9 @@
 import { test, expect } from "vitest";
-import { UnifiedTranslator } from "../../src/mapper.js";
+import { UnifiedTranslator } from "../../src/translator/index.js";
 
 test("maps claude thought into ACP metadata", () => {
-  const mapper = new UnifiedTranslator();
-  const results = mapper.claudeToAcp({
+  const translator = new UnifiedTranslator();
+  const results = translator.claudeToAcp({
     type: "assistant",
     subtype: "chunk",
     text: "visible text",
@@ -19,8 +19,8 @@ test("maps claude thought into ACP metadata", () => {
 });
 
 test("maps ACP permission requests to github permission envelope", () => {
-  const mapper = new UnifiedTranslator();
-  const outgoing = mapper.acpToGithub({
+  const translator = new UnifiedTranslator();
+  const outgoing = translator.acpToGithub({
     jsonrpc: "2.0",
     id: 42,
     method: "session/request_permission",
