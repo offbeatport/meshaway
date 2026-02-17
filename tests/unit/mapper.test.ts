@@ -11,12 +11,11 @@ test("maps claude thought into ACP metadata", () => {
     session_id: "sess_1",
   });
 
-  expect(results.length > 0).toBe(true);
-  const first = results[0] as Record<string, unknown>;
-  expect(first.method).toBe("session/prompt");
-  const params = first.params as Record<string, unknown>;
-  const meta = params?._meta as Record<string, unknown>;
-  expect(meta.thought).toBe("hidden thought");
+  expect(results).toHaveLength(1);
+  expect(results[0]).toMatchObject({
+    method: "session/prompt",
+    params: { _meta: { thought: "hidden thought" } },
+  });
 });
 
 test("maps ACP permission requests to github permission envelope", () => {
@@ -27,14 +26,10 @@ test("maps ACP permission requests to github permission envelope", () => {
     method: "session/request_permission",
     params: {
       sessionId: "sess_2",
-      toolCall: {
-        toolCallId: "perm_123",
-        command: "rm -rf node_modules",
-      },
+      toolCall: { toolCallId: "perm_123", command: "rm -rf node_modules" },
       options: [],
     },
   });
-  expect(outgoing.length).toBe(1);
-  const first = outgoing[0] as Record<string, unknown>;
-  expect(first.method).toBe("session/request_permission");
+  expect(outgoing).toHaveLength(1);
+  expect(outgoing[0]).toMatchObject({ method: "session/request_permission" });
 });

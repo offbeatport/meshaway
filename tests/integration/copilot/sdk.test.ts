@@ -9,18 +9,11 @@ test("github copilot sdk user.message event maps to ACP session/prompt", () => {
     timestamp: new Date().toISOString(),
     parentId: "session_1",
     type: "user.message",
-    data: {
-      content: "review this project",
-    },
+    data: { content: "review this project" },
   };
-
-  const rpcPayload = copilotEventToGithubRpc(event);
-  const translator = new UnifiedTranslator();
-  const acp = translator.githubToAcp(rpcPayload);
-
-  expect(acp.length).toBe(1);
-  const first = acp[0] as Record<string, unknown>;
-  expect(first.method).toBe("session/prompt");
+  const acp = new UnifiedTranslator().githubToAcp(copilotEventToGithubRpc(event));
+  expect(acp).toHaveLength(1);
+  expect(acp[0]).toMatchObject({ method: "session/prompt" });
 });
 
 test("github copilot sdk tool event maps to ACP tool_call update", () => {
@@ -29,20 +22,11 @@ test("github copilot sdk tool event maps to ACP tool_call update", () => {
     timestamp: new Date().toISOString(),
     parentId: "session_1",
     type: "tool.user_requested",
-    data: {
-      toolCallId: "call_1",
-      toolName: "bash",
-      arguments: { command: "npm install" },
-    },
+    data: { toolCallId: "call_1", toolName: "bash", arguments: { command: "npm install" } },
   };
-
-  const rpcPayload = copilotEventToGithubRpc(event);
-  const translator = new UnifiedTranslator();
-  const acp = translator.githubToAcp(rpcPayload);
-
-  expect(acp.length).toBe(1);
-  const first = acp[0] as Record<string, unknown>;
-  expect(first.method).toBe("session/update");
+  const acp = new UnifiedTranslator().githubToAcp(copilotEventToGithubRpc(event));
+  expect(acp).toHaveLength(1);
+  expect(acp[0]).toMatchObject({ method: "session/update" });
 });
 
 test("github copilot sdk defineTool helper is usable in integration", async () => {
@@ -50,7 +34,6 @@ test("github copilot sdk defineTool helper is usable in integration", async () =
     description: "Echo input back to caller",
     handler: async () => "ok",
   });
-
   const result = await tool.handler(
     {},
     { sessionId: "session_1", toolCallId: "call_1", toolName: tool.name, arguments: {} },

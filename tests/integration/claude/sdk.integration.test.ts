@@ -11,37 +11,24 @@ test("claude code sdk tool_use_summary message preserves thought into ACP metada
     uuid: "123e4567-e89b-12d3-a456-426614174000",
     session_id: "claude_session_1",
   } as unknown as SDKMessage;
-
-  const claudePayload = claudeSdkMessageToStreamJson(message);
-  const translator = new UnifiedTranslator();
-  const acp = translator.claudeToAcp(claudePayload);
-
-  expect(acp.length).toBe(1);
-  const first = acp[0] as Record<string, unknown>;
-  expect(first.method).toBe("session/prompt");
-  const params = first.params as Record<string, unknown>;
-  const meta = params._meta as Record<string, unknown>;
-  expect(meta.thought).toBe("Planning edits before applying patches");
+  const acp = new UnifiedTranslator().claudeToAcp(claudeSdkMessageToStreamJson(message));
+  expect(acp).toHaveLength(1);
+  expect(acp[0]).toMatchObject({
+    method: "session/prompt",
+    params: { _meta: { thought: "Planning edits before applying patches" } },
+  });
 });
 
 test("claude code sdk user message can be adapted to ACP prompt text", () => {
   const message = {
     type: "user",
-    message: {
-      role: "user",
-      content: [{ type: "text", text: "explain this diff" }],
-    },
+    message: { role: "user", content: [{ type: "text", text: "explain this diff" }] },
     parent_tool_use_id: null,
     session_id: "claude_session_1",
   } as unknown as SDKMessage;
-
-  const claudePayload = claudeSdkMessageToStreamJson(message);
-  const translator = new UnifiedTranslator();
-  const acp = translator.claudeToAcp(claudePayload);
-
-  expect(acp.length).toBe(1);
-  const first = acp[0] as Record<string, unknown>;
-  expect(first.method).toBe("session/prompt");
+  const acp = new UnifiedTranslator().claudeToAcp(claudeSdkMessageToStreamJson(message));
+  expect(acp).toHaveLength(1);
+  expect(acp[0]).toMatchObject({ method: "session/prompt" });
 });
 
 test("claude code sdk query API is available for runtime integration", () => {

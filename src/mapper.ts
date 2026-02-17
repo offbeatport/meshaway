@@ -5,7 +5,7 @@ import {
   type AcpResponse,
   type JsonRpcIdSchema,
 } from "./protocols/acp.js";
-import { ClaudeMessageSchema } from "./protocols/claude-code.js";
+import { ClaudeMessageSchema } from "./protocols/claude.js";
 import { GithubJsonRpcEnvelopeSchema } from "./protocols/github.js";
 import type { ClientType } from "./types.js";
 
@@ -502,11 +502,11 @@ export class UnifiedTranslator {
           thought: normalized.thought,
           usage: normalized.usage
             ? {
-                model: normalized.usage.model,
-                input_tokens: normalized.usage.inputTokens,
-                output_tokens: normalized.usage.outputTokens,
-                cache_creation_input_tokens: normalized.usage.cachedInputTokens,
-              }
+              model: normalized.usage.model,
+              input_tokens: normalized.usage.inputTokens,
+              output_tokens: normalized.usage.outputTokens,
+              cache_creation_input_tokens: normalized.usage.cachedInputTokens,
+            }
             : undefined,
         };
       case "tool_call":
