@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
-import { BridgeEngine } from "./bridge/index.js";
+import { BridgeEngine } from "./bridge/bridge-engine.js";
 import type { MeshMode, Provider } from "./types.js";
 import { ObserverEventBus } from "./ui/events.js";
 import { startObserverServer } from "./ui/server.js";
@@ -171,7 +171,8 @@ export function createProgram(): Command {
     .name("meshaway")
     .description("Meshaway CLI — stdio adapter (default), server (serve), status, logs, config")
     .version("0.1.0")
-    .allowExcessArguments(true);
+    .allowExcessArguments(true)
+    .allowUnknownOption(true);
 
   // ---- Default: stdio adapter (meshaway [options]) ----
   program
@@ -190,18 +191,14 @@ export function createProgram(): Command {
     .option("--agent-arg <arg...>", "Arguments passed to child command", [])
     .option("--cwd <cwd>", "Working directory for child process")
     .action(async (opts: Record<string, string | undefined>) => {
-      const excess = program.args?.length ? program.args : [];
-      if (excess.length > 0) {
-        process.stderr.write(`Unknown command '${excess[0]}'. See meshaway --help.\n`);
-        exit(EXIT.INVALID_ARGS);
-      }
       if (process.stdin.isTTY) {
         process.stdout.write(
           "meshaway is typically run by SDKs over stdio (stdin/stdout).\n" +
-          "For interactive usage, try: meshaway --help\n" +
-          "  meshaway serve       — start the server\n" +
-          "  meshaway serve --ui — server + dashboard\n" +
-          "  meshaway status     — show runtime and connectivity\n",
+          "For interactive usage, try: \n" +
+          "  meshaway --help\n" +
+          "  meshaway serve         — start the server\n" +
+          "  meshaway serve --ui    — server + dashboard\n" +
+          "  meshaway status        — show runtime and connectivity\n",
         );
         exit(EXIT.SUCCESS);
       }
@@ -425,35 +422,4 @@ export function createProgram(): Command {
     });
 
   return program;
-}
-
-
-export async function runCompatFromRawArgs(rawArgs: string[]): Promise<boolean> {
-
-  const getOption = (name: string): string | undefined => {
-    const index = rawArgs.findIndex((arg) => arg === name);
-    if (index === -1 || index + 1 >= rawArgs.length) return undefined;
-    const candidate = rawArgs[index + 1];
-    return candidate.startsWith("--") ? undefined : candidate;
-  };
-
-  const rawAgentArg = ((): string[] => {
-    const idx = rawArgs.findIndex((a) => a === "--agent-arg");
-    if (idx === -1 || idx + 1 >= rawArgs.length) return [];
-    return rawArgs.slice(idx + 1).filter((a) => !a.startsWith("--"));
-  })();
-
-  await runBridge(
-    {
-      mode: (getOption("--mode") as MeshMode | undefined) ?? "github",
-      clientType: (getOption("--client-type") as MeshMode | undefined) ?? "github",
-      provider: (getOption("--provider") as Provider | undefined) ?? "github",
-      agentCommand: getOption("--agent-command") ?? getOption("--agent") ?? "cat",
-      agentArg: stripSdkFlags(rawAgentArg),
-      cwd: getOption("--cwd") ?? process.cwd(),
-    },
-    false,
-  );
-
-  return true;
 }

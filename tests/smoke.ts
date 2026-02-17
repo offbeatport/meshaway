@@ -1,4 +1,4 @@
-import { UnifiedTranslator } from "../src/translator/index.js";
+import { UnifiedTranslator } from "../src/translator/translator.js";
 
 const translator = new UnifiedTranslator();
 const acp = translator.githubToAcp({

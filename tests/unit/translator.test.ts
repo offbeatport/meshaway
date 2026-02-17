@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { UnifiedTranslator } from "../../src/translator/index.js";
+import { UnifiedTranslator } from "../../src/translator/translator.js";
 
 test("maps claude thought into ACP metadata", () => {
   const translator = new UnifiedTranslator();

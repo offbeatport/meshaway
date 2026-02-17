@@ -1,4 +1,4 @@
-import type { UnifiedTranslator } from "../translator/index.js";
+import type { UnifiedTranslator } from "../translator/translator.js";
 import { asRecord, stringValue } from "./helpers.js";
 
 /** Minimal engine interface the Copilot handler needs. */
