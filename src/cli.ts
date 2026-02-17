@@ -10,6 +10,7 @@ import { EXIT, exit } from "./exit-codes.js";
 import { getEnv } from "./env-defaults.js";
 import {
   getDataDir,
+  getConfigPath,
   configGet,
   configSet,
   configEdit,
@@ -22,27 +23,15 @@ import {
   type ServerServeOptions,
 } from "./server/server.js";
 
-/** Copilot/SDK-specific flags to strip before passing args to the ACP child agent. */
-const COPILOT_STRIP_FLAGS = [
-  "--stdio",
-  "--headless",
-  "--log-level",
-  "--logLevel",
-  "--verbose",
-  "-v",
-  "--quiet",
-  "-q",
-  "--no-open",
-  "--port",
-  "--host",
-];
-
-function stripCopilotArgs(args: string[]): string[] {
+/**
+ * Strip flags (and their optional value) from args. Used by SDK-specific strippers.
+ */
+function stripFlagsFromArgs(args: string[], flags: string[]): string[] {
   const out: string[] = [];
   let i = 0;
   while (i < args.length) {
     const arg = args[i];
-    const flag = COPILOT_STRIP_FLAGS.find((f) => arg === f || arg.startsWith(`${f}=`));
+    const flag = flags.find((f) => arg === f || arg.startsWith(`${f}=`));
     if (flag) {
       if (arg === flag && i + 1 < args.length && !args[i + 1].startsWith("-")) {
         i += 1;
@@ -54,6 +43,76 @@ function stripCopilotArgs(args: string[]): string[] {
     i += 1;
   }
   return out;
+}
+
+function getCopilotStripFlags(): string[] {
+  return [
+    "--stdio",
+    "--headless",
+    "--log-level",
+    "--logLevel",
+    "--verbose",
+    "-v",
+    "--quiet",
+    "-q",
+    "--no-open",
+    "--port",
+    "--host",
+  ];
+}
+
+function stripCopilotFlags(args: string[]): string[] {
+  return stripFlagsFromArgs(args, getCopilotStripFlags());
+}
+
+function getClaudeStripFlags(): string[] {
+  return [
+    "--path-to-executable",
+    "--log-level",
+    "--verbose",
+    "-v",
+    "--quiet",
+    "-q",
+  ];
+}
+
+function stripClaudeFlags(args: string[]): string[] {
+  return stripFlagsFromArgs(args, getClaudeStripFlags());
+}
+
+/** Known SDK callers; used to strip only that SDK's flags when detectable. */
+type SdkKind = "copilot" | "claude" | "cursor";
+
+const SDK_KINDS: SdkKind[] = ["copilot", "claude", "cursor"];
+
+/**
+ * Detect which SDK/IDE is invoking the CLI so we can strip only that SDK's flags.
+ * Uses MESHAWAY_SDK override (copilot|claude|cursor), then TERM_PROGRAM (Cursor vs vscode), etc.
+ */
+function detectSdkCaller(): SdkKind | undefined {
+  const override = process.env.MESHAWAY_SDK;
+  if (override && SDK_KINDS.includes(override as SdkKind)) {
+    return override as SdkKind;
+  }
+  const term = process.env.TERM_PROGRAM;
+  if (term === "Cursor") return "cursor";
+  if (term === "vscode") return "copilot";
+  return undefined;
+}
+
+/** Strip SDK-specific flags. If caller is detected (or passed), only that SDK's flags are stripped; otherwise all. */
+function stripSdkFlags(args: string[], sdk?: SdkKind): string[] {
+  const who = sdk ?? detectSdkCaller();
+  switch (who) {
+    case "copilot":
+      return stripCopilotFlags(args);
+    case "claude":
+      return stripClaudeFlags(args);
+    case "cursor":
+      return stripCopilotFlags(args);
+    default:
+      return stripClaudeFlags(stripCopilotFlags(args));
+  }
 }
 
 interface RuntimeOptions {
@@ -81,7 +140,7 @@ function openBrowser(url: string): void {
 
 async function runBridge(options: RuntimeOptions, withUi: boolean): Promise<void> {
   const eventBus = new ObserverEventBus();
-  const agentArgs = stripCopilotArgs(options.agentArg ?? []);
+  const agentArgs = stripSdkFlags(options.agentArg ?? []);
   const engine = new BridgeEngine({
     mode: options.mode,
     clientType: options.clientType,
@@ -169,7 +228,7 @@ export function createProgram(): Command {
           clientType: protocol === "copilot" ? "github" : protocol === "acp" ? "claude" : clientType,
           provider,
           agentCommand,
-          agentArg: stripCopilotArgs(agentArg),
+          agentArg: stripSdkFlags(agentArg),
           cwd,
         },
         false,
@@ -253,43 +312,57 @@ export function createProgram(): Command {
       }
     });
 
-
-  program
-    .command("ui")
-    .description("Launch observer dashboard and run bridge")
-    .option("--mode <mode>", "Input mode", "auto")
-    .option("--client-type <type>", "Output translation", "auto")
-    .option("--provider <provider>", "Agent provider", "github")
-    .option("--agent-command <command>", "Child ACP agent command", "cat")
-    .option("--agent-arg <arg...>", "Arguments for child", [])
-    .option("--cwd <cwd>", "Working directory")
-    .option("--port <port>", "Observer port", "1618")
-    .action(async (opts: Record<string, string | undefined>) => {
-      await runBridge(
-        {
-          mode: (opts.mode ?? "auto") as MeshMode,
-          clientType: (opts.clientType ?? "auto") as MeshMode,
-          provider: (opts.provider ?? "github") as Provider,
-          agentCommand: opts.agentCommand ?? "cat",
-          agentArg: stripCopilotArgs(Array.isArray(opts.agentArg) ? opts.agentArg : []),
-          cwd: opts.cwd ?? process.cwd(),
-          port: Number(opts.port ?? 1618),
-        },
-        true,
-      );
-    });
-
   // ---- meshaway status ----
   program
     .command("status")
     .description("Show runtime and connectivity")
-    .action(async () => {
+    .option("--data-dir <path>", "Config/data directory", "~/.meshaway")
+    .action(async (opts: { dataDir?: string }) => {
+      const dataDir = opts.dataDir
+        ? path.resolve(opts.dataDir.replace(/^~/, homedir()))
+        : getDataDir();
+
       const serverUrl = getEnv("SERVER");
       if (serverUrl) {
-        process.stdout.write(JSON.stringify({ server: serverUrl, mode: "client" }, null, 2) + "\n");
-      } else {
-        process.stdout.write(JSON.stringify({ mode: "stdio" }, null, 2) + "\n");
+        const token = getEnv("TOKEN");
+        process.stdout.write(
+          JSON.stringify(
+            {
+              mode: "client",
+              server: serverUrl,
+              ...(token ? { token: "***" } : {}),
+            },
+            null,
+            2,
+          ) + "\n",
+        );
+        return;
       }
+
+      const [configAgent, configServerUrl, configLogLevel] = await Promise.all([
+        configGet(dataDir, "default.agent"),
+        configGet(dataDir, "server.url"),
+        configGet(dataDir, "log.level"),
+      ]);
+
+      const protocol = getEnv("MODE") ?? "auto";
+      const agent = getEnv("AGENT") ?? configAgent ?? "cat";
+      const logLevel = getEnv("LOG_LEVEL") ?? configLogLevel ?? "info";
+
+      const stdioStatus = {
+        mode: "stdio",
+        protocol,
+        agent,
+        cwd: process.cwd(),
+        logLevel,
+        version: "0.1.0",
+        configPath: getConfigPath(dataDir),
+        ...(configServerUrl
+          ? { serverConfigured: configServerUrl, serverUsed: false }
+          : {}),
+      };
+
+      process.stdout.write(JSON.stringify(stdioStatus, null, 2) + "\n");
     });
 
   // ---- meshaway logs ----
@@ -355,17 +428,21 @@ export function createProgram(): Command {
   return program;
 }
 
+/** Flags that indicate an agent SDK is invoking the CLI (stdio/headless mode). */
+const SDK_INVOCATION_FLAGS = ["--stdio", "--headless"];
+
 export async function runCompatFromRawArgs(rawArgs: string[]): Promise<boolean> {
-  const hasCopilotServerFlags = rawArgs.includes("--stdio") || rawArgs.includes("--headless");
+  const hasSdkInvocation = rawArgs.some((arg) => SDK_INVOCATION_FLAGS.includes(arg));
   const hasSubcommand = rawArgs.some(
     (arg) =>
       arg === "serve" ||
       arg === "status" ||
       arg === "logs" ||
       arg === "config" ||
-      arg === "ui",
+      arg === "ui" ||
+      arg === "start",
   );
-  if (!hasCopilotServerFlags || hasSubcommand) {
+  if (!hasSdkInvocation || hasSubcommand) {
     return false;
   }
 
@@ -388,7 +465,7 @@ export async function runCompatFromRawArgs(rawArgs: string[]): Promise<boolean> 
       clientType: (getOption("--client-type") as MeshMode | undefined) ?? "github",
       provider: (getOption("--provider") as Provider | undefined) ?? "github",
       agentCommand: getOption("--agent-command") ?? getOption("--agent") ?? "cat",
-      agentArg: stripCopilotArgs(rawAgentArg),
+      agentArg: stripSdkFlags(rawAgentArg),
       cwd: getOption("--cwd") ?? process.cwd(),
     },
     false,

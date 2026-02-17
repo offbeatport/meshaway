@@ -1,0 +1,12 @@
+[
+  "/Users/vladpalos/.local/share/mise/installs/node/24.0.1/bin/node",
+  "/Users/vladpalos/Development/meshaway/dist/meshaway.cjs",
+  "--headless",
+  "--no-auto-update",
+  "--log-level",
+  "error",
+  "--stdio",
+  "--auth-token-env",
+  "COPILOT_SDK_AUTH_TOKEN",
+  "--no-auto-login"
+]

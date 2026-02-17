@@ -1,8 +1,7 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { test, expect } from "vitest";
 import { query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { UnifiedTranslator } from "../../../src/mapper.js";
-import { claudeSdkMessageToStreamJson } from "./lib/sdk-adapters.js";
+import { claudeSdkMessageToStreamJson } from "./sdk-adapters.js";
 
 test("claude code sdk tool_use_summary message preserves thought into ACP metadata", () => {
   const message = {
@@ -17,12 +16,12 @@ test("claude code sdk tool_use_summary message preserves thought into ACP metada
   const translator = new UnifiedTranslator();
   const acp = translator.claudeToAcp(claudePayload);
 
-  assert.equal(acp.length, 1);
+  expect(acp.length).toBe(1);
   const first = acp[0] as Record<string, unknown>;
-  assert.equal(first.method, "session/prompt");
+  expect(first.method).toBe("session/prompt");
   const params = first.params as Record<string, unknown>;
   const meta = params._meta as Record<string, unknown>;
-  assert.equal(meta.thought, "Planning edits before applying patches");
+  expect(meta.thought).toBe("Planning edits before applying patches");
 });
 
 test("claude code sdk user message can be adapted to ACP prompt text", () => {
@@ -40,11 +39,11 @@ test("claude code sdk user message can be adapted to ACP prompt text", () => {
   const translator = new UnifiedTranslator();
   const acp = translator.claudeToAcp(claudePayload);
 
-  assert.equal(acp.length, 1);
+  expect(acp.length).toBe(1);
   const first = acp[0] as Record<string, unknown>;
-  assert.equal(first.method, "session/prompt");
+  expect(first.method).toBe("session/prompt");
 });
 
 test("claude code sdk query API is available for runtime integration", () => {
-  assert.equal(typeof query, "function");
+  expect(typeof query).toBe("function");
 });

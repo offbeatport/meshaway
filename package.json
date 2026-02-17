@@ -11,9 +11,11 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/meshaway.cjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --import tsx ./tests/unit/**/*.test.ts ./tests/integration/**/*.test.ts",
-    "test:unit": "node --test --import tsx ./tests/unit/**/*.test.ts",
-    "test:integration": "node --test --import tsx ./tests/integration/**/*.test.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "vitest run tests/e2e",
+    "test:watch": "vitest",
     "smoke": "tsx ./tests/smoke.ts",
     "build:native": "npm run build && node scripts/build-sea.mjs"
   },
@@ -44,6 +46,7 @@
     "@types/react-dom": "^19.1.7",
     "postject": "^1.0.0-alpha.6",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.18"
   }
 }

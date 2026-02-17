@@ -1,8 +1,7 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { test, expect } from "vitest";
 import { defineTool, type SessionEvent } from "@github/copilot-sdk";
 import { UnifiedTranslator } from "../../../src/mapper.js";
-import { copilotEventToGithubRpc } from "./lib/sdk-adapters.js";
+import { copilotEventToGithubRpc } from "./sdk-adapters.js";
 
 test("github copilot sdk user.message event maps to ACP session/prompt", () => {
   const event: SessionEvent = {
@@ -19,9 +18,9 @@ test("github copilot sdk user.message event maps to ACP session/prompt", () => {
   const translator = new UnifiedTranslator();
   const acp = translator.githubToAcp(rpcPayload);
 
-  assert.equal(acp.length, 1);
+  expect(acp.length).toBe(1);
   const first = acp[0] as Record<string, unknown>;
-  assert.equal(first.method, "session/prompt");
+  expect(first.method).toBe("session/prompt");
 });
 
 test("github copilot sdk tool event maps to ACP tool_call update", () => {
@@ -41,9 +40,9 @@ test("github copilot sdk tool event maps to ACP tool_call update", () => {
   const translator = new UnifiedTranslator();
   const acp = translator.githubToAcp(rpcPayload);
 
-  assert.equal(acp.length, 1);
+  expect(acp.length).toBe(1);
   const first = acp[0] as Record<string, unknown>;
-  assert.equal(first.method, "session/update");
+  expect(first.method).toBe("session/update");
 });
 
 test("github copilot sdk defineTool helper is usable in integration", async () => {
@@ -56,6 +55,6 @@ test("github copilot sdk defineTool helper is usable in integration", async () =
     {},
     { sessionId: "session_1", toolCallId: "call_1", toolName: tool.name, arguments: {} },
   );
-  assert.equal(tool.name, "mesh_echo");
-  assert.equal(result, "ok");
+  expect(tool.name).toBe("mesh_echo");
+  expect(result).toBe("ok");
 });

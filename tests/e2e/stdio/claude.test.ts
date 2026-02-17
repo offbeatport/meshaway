@@ -1,16 +1,17 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { test, expect } from "vitest";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
-// Mesh currently speaks Copilot JSON-RPC only; Claude SDK expects a different stdio protocol.
-// Skip until meshaway implements Claude Code CLI transport.
-test.skip("existing Claude SDK app can point pathToClaudeCodeExecutable to meshaway executable", async () => {
+/**
+ * E2E stdio + Claude: Claude SDK app → meshaway (as Claude Code executable) → bridge → agent.
+ * Skipped until meshaway implements Claude Code CLI transport.
+ */
+test.skip("Claude stdio: full flow (SDK → meshaway → bridge → agent)", async () => {
   const fixturePath = path.resolve(
     process.cwd(),
     "tests",
-    "integration",
-    "claude",
+    "e2e",
+    "stdio",
     "fixtures",
     "claude-user-flow.mjs",
   );
@@ -29,12 +30,13 @@ test.skip("existing Claude SDK app can point pathToClaudeCodeExecutable to mesha
     });
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
+      process.stderr.write(chunk.toString());
     });
     child.on("close", (code) => {
       resolve({ code, stdout, stderr });
     });
   });
 
-  assert.equal(result.code, 0, `fixture failed: ${result.stderr}\n${result.stdout}`);
-  assert.equal(result.stdout.includes("CLAUDE_FLOW_OK"), true, `stdout: ${result.stdout}`);
+  expect(result.code, `e2e fixture failed: ${result.stderr}\n${result.stdout}`).toBe(0);
+  expect(result.stdout.includes("CLAUDE_FLOW_OK"), `expected CLAUDE_FLOW_OK in stdout: ${result.stdout}`).toBe(true);
 });

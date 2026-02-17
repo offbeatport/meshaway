@@ -16,7 +16,7 @@ async function ensureMeshBuilt() {
 }
 
 process.on("unhandledRejection", () => {
-  // Keep fixture process stable; parent integration test validates outcomes.
+  // Keep fixture process stable; parent e2e test validates outcomes.
 });
 
 await ensureMeshBuilt();
@@ -34,7 +34,10 @@ try {
   await client.start();
   const ping = await client.ping("mesh-health");
   const session = await client.createSession({ model: "mesh-local" });
-  const reply = await session.sendAndWait({ prompt: "hello from copilot sdk user app" }, 10_000);
+  const reply = await session.sendAndWait(
+    { prompt: "hello from copilot sdk user app" },
+    10_000,
+  );
   const events = await session.getMessages();
 
   const ok =
@@ -50,7 +53,9 @@ try {
 
   process.stdout.write("COPILOT_FLOW_OK\n");
 } catch (error) {
-  process.stdout.write(`COPILOT_FLOW_ERROR:${error instanceof Error ? error.message : String(error)}\n`);
+  process.stdout.write(
+    `COPILOT_FLOW_ERROR:${error instanceof Error ? error.message : String(error)}\n`,
+  );
   process.exit(3);
 } finally {
   await client.stop().catch(() => {});
