@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
 import { BridgeEngine } from "./bridge/bridge-engine.js";
-import type { MeshMode, Provider } from "./types.js";
+import type { MeshMode } from "./types.js";
 import { ObserverEventBus } from "./ui/events.js";
 import { startObserverServer } from "./ui/server.js";
 import { EXIT, exit } from "./exit-codes.js";
@@ -16,6 +16,9 @@ import {
   configEdit,
   isConfigKey,
   type ConfigKey,
+  readFullConfig,
+  listAgents,
+  resolveAgentConfig,
 } from "./config.js";
 import {
   startServer,
@@ -100,6 +103,7 @@ function detectSdkCaller(): SdkKind | undefined {
   return undefined;
 }
 
+
 /** Strip SDK-specific flags. If caller is detected (or passed), only that SDK's flags are stripped; otherwise all. */
 function stripSdkFlags(args: string[], sdk?: SdkKind): string[] {
   const who = sdk ?? detectSdkCaller();
@@ -116,13 +120,15 @@ function stripSdkFlags(args: string[], sdk?: SdkKind): string[] {
 }
 
 interface RuntimeOptions {
-  mode: MeshMode;
+  /** Logical client type (github|claude|auto) — used for both input and output. */
   clientType: MeshMode;
-  provider: Provider;
   agentCommand: string;
   agentArg: string[];
   cwd: string;
   port?: number;
+  /** When set, use remote HTTP agent instead of spawning agentCommand. */
+  agentUrl?: string;
+  apiKeyEnv?: string;
 }
 
 function openBrowser(url: string): void {
@@ -142,13 +148,13 @@ async function runBridge(options: RuntimeOptions, withUi: boolean): Promise<void
   const eventBus = new ObserverEventBus();
   const agentArgs = stripSdkFlags(options.agentArg ?? []);
   const engine = new BridgeEngine({
-    mode: options.mode,
     clientType: options.clientType,
-    provider: options.provider,
     agentCommand: options.agentCommand,
     agentArgs,
     cwd: options.cwd,
     eventBus,
+    agentUrl: options.agentUrl,
+    apiKeyEnv: options.apiKeyEnv,
   });
 
   if (withUi) {
@@ -178,17 +184,14 @@ export function createProgram(): Command {
   program
     .option("--server <url>", "Forward all traffic to a running server")
     .option("--token <token>", "Auth token for connecting to a remote server")
-    .option("--format <auto|copilot|acp>", "Message format to speak on stdio", "auto")
-    .option("--agent <name>", "Default backend route when not using a server")
     .option("--connect-timeout <ms>", "Connection timeout in ms")
     .option("--request-timeout <ms>", "Request timeout in ms", "60000")
     .option("--log-level <level>", "Log level: error, warn, info, debug", "info")
     .option("--log-format <format>", "Log format: text or json", "text")
-    .option("--mode <mode>", "Input mode (github|claude|auto)", "auto")
-    .option("--client-type <type>", "Output translation (github|claude|auto)", "auto")
-    .option("--provider <provider>", "Agent provider (github|claude|gemini)", "github")
+    .option("--client-type <type>", "Client protocol (github|claude|auto)", "auto")
+    .option("--agent <name>", "Logical agent name (from config.agents)")
+    .option("--agent-arg <arg...>", "Arguments passed to agent child command", [])
     .option("--agent-command <command>", "Child ACP agent command")
-    .option("--agent-arg <arg...>", "Arguments passed to child command", [])
     .option("--cwd <cwd>", "Working directory for child process")
     .action(async (opts: Record<string, string | undefined>) => {
       if (process.stdin.isTTY) {
@@ -209,26 +212,47 @@ export function createProgram(): Command {
         exit(EXIT.SERVER_FAILURE);
       }
 
-      const format = (opts.format ?? getEnv("MODE") ?? "auto") as "auto" | "copilot" | "acp";
-      const mode = (opts.mode ?? getEnv("MODE") ?? "auto") as MeshMode;
-      const clientType = (opts.clientType ?? "auto") as MeshMode;
-      const provider = (opts.provider ?? "github") as Provider;
-      const agentFromEnv = getEnv("AGENT");
-      const agentCommand = opts.agentCommand ?? opts.agent ?? agentFromEnv ?? "cat";
+      const clientType = (opts.clientType ?? getEnv("MODE") ?? "auto") as MeshMode;
+      const agentName = opts.agent ?? getEnv("AGENT") ?? undefined;
       const cwd = opts.cwd ?? process.cwd();
       const agentArg = Array.isArray(opts.agentArg) ? opts.agentArg : [];
 
-      await runBridge(
-        {
-          mode: format === "copilot" ? "github" : format === "acp" ? "auto" : mode,
-          clientType: format === "copilot" ? "github" : format === "acp" ? "claude" : clientType,
-          provider,
-          agentCommand,
-          agentArg: stripSdkFlags(agentArg),
-          cwd,
-        },
-        false,
-      );
+      // Direct agent-command overrides config.
+      if (opts.agentCommand) {
+        await runBridge(
+          {
+            clientType,
+            agentCommand: opts.agentCommand,
+            agentArg: stripSdkFlags(agentArg),
+            cwd,
+          },
+          false,
+        );
+        return;
+      }
+
+      // Otherwise, resolve from config: default.agent and agents[].
+      const dataDir = getDataDir();
+      const defaultAgent = (await configGet(dataDir, "default.agent")) ?? undefined;
+      const resolvedName = agentName ?? defaultAgent;
+      const resolved = await resolveAgentConfig(dataDir, resolvedName);
+      const agentCommand = resolved?.command ?? "cat";
+      const combinedArgs = [
+        ...(resolved?.args ?? []),
+        ...stripSdkFlags(agentArg),
+      ];
+      const runOpts: RuntimeOptions = {
+        clientType,
+        agentCommand,
+        agentArg: combinedArgs,
+        cwd,
+      };
+      if (resolved?.type === "remote" && resolved.url) {
+        runOpts.agentUrl = resolved.url;
+        if (resolved.apiKeyEnv) runOpts.apiKeyEnv = resolved.apiKeyEnv;
+      }
+
+      await runBridge(runOpts, false);
     });
 
   // ---- meshaway serve ----
@@ -255,9 +279,7 @@ export function createProgram(): Command {
       if (withUi) {
         const eventBus = new ObserverEventBus();
         const engine = new BridgeEngine({
-          mode: "auto",
           clientType: "github",
-          provider: "github",
           agentCommand: "cat",
           agentArgs: [],
           cwd: process.cwd(),
@@ -382,7 +404,7 @@ export function createProgram(): Command {
 
   const configCmd = program
     .command("config")
-    .description("Manage config (server.url, server.token, default.agent, log.level)")
+    .description("Manage config (server.url, server.token, default.agent, log.level, agents)")
     .option("--data-dir <path>", "Config/data directory", "~/.meshaway");
 
   configCmd
@@ -419,6 +441,40 @@ export function createProgram(): Command {
     .option("--data-dir <path>", "Config/data directory")
     .action(async () => {
       await configEdit(configDataDir());
+    });
+
+  configCmd
+    .command("show")
+    .description("Show full config object as JSON")
+    .option("--data-dir <path>", "Config/data directory")
+    .action(async () => {
+      const dataDir = configDataDir();
+      const full = await readFullConfig(dataDir);
+      process.stdout.write(JSON.stringify(full, null, 2) + "\n");
+    });
+
+  // ---- meshaway agents ----
+  program
+    .command("agents")
+    .description("List configured agents from config.json")
+    .option("--data-dir <path>", "Config/data directory", "~/.meshaway")
+    .action(async (opts: { dataDir?: string }) => {
+      const dataDir = opts.dataDir
+        ? path.resolve(opts.dataDir.replace(/^~/, homedir()))
+        : getDataDir();
+      const agents = await listAgents(dataDir);
+      if (agents.length === 0) {
+        process.stdout.write("No agents configured. Use `meshaway config edit` to add an agents[] array.\n");
+        return;
+      }
+      for (const agent of agents) {
+        const summaryParts: string[] = [];
+        if (agent.type) summaryParts.push(agent.type);
+        if (agent.command) summaryParts.push(agent.command);
+        if (agent.url) summaryParts.push(agent.url);
+        const summary = summaryParts.length ? ` (${summaryParts.join(" · ")})` : "";
+        process.stdout.write(`- ${agent.name}${summary}\n`);
+      }
     });
 
   return program;

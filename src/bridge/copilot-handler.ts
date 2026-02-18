@@ -1,16 +1,20 @@
 import type { UnifiedTranslator } from "../translator/translator.js";
 import { asRecord, stringValue } from "./helpers.js";
 
-/** Minimal engine interface the Copilot handler needs. */
-export interface ICopilotHandlerEngine {
+/**
+ * Contract the engine exposes for stateful client handlers (e.g. GitHub/Copilot).
+ * Handlers that need session state, ID mapping, or protocol-specific lifecycle
+ * use this; clients like Claude use translate-only and need no handler.
+ */
+export interface IClientHandlerEngine {
   options: { cwd: string };
-  copilotSessions: Map<
+  githubSessions: Map<
     string,
     { createdAt: number; modifiedAt: number; summary?: string; events: Record<string, unknown>[] }
   >;
-  lastCopilotSessionId: string | undefined;
-  setLastCopilotSessionId(id: string | undefined): void;
-  acpIdToCopilotId: Map<string | number, string | number>;
+  lastGithubSessionId: string | undefined;
+  setLastGithubSessionId(id: string | undefined): void;
+  acpIdToGithubId: Map<string | number, string | number>;
   acpIdToSessionId: Map<string | number, string>;
   responseBuffer: string;
   setResponseBuffer(s: string): void;
@@ -39,7 +43,8 @@ export function makeCopilotEvent(
   };
 }
 
-export function createCopilotHandler(engine: ICopilotHandlerEngine) {
+/** GitHub/Copilot protocol handler: session lifecycle, ID mapping, JSON-RPC. */
+export function createGithubHandler(engine: IClientHandlerEngine) {
   const ctx = engine;
   function sendRpcResponse(id: string | number, result: unknown): void {
     ctx.writeClientMessage({ jsonrpc: "2.0", id, result });
@@ -62,7 +67,7 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
   }
 
   function appendCopilotEvent(sessionId: string, event: Record<string, unknown>): void {
-    const session = ctx.copilotSessions.get(sessionId);
+    const session = ctx.githubSessions.get(sessionId);
     if (!session) return;
     session.events.push(event);
     session.modifiedAt = Date.now();
@@ -106,10 +111,10 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
     sessionId: string,
     prompt: string,
   ): void {
-    const handle = setTimeout(() => {
+    const handleTimeout = setTimeout(() => {
       ctx.forwardTimeouts.delete(acpRequestId);
-      if (!ctx.acpIdToCopilotId.has(acpRequestId)) return;
-      ctx.acpIdToCopilotId.delete(acpRequestId);
+      if (!ctx.acpIdToGithubId.has(acpRequestId)) return;
+      ctx.acpIdToGithubId.delete(acpRequestId);
       ctx.acpIdToSessionId.delete(acpRequestId);
       ctx.pendingRequestIds.delete(acpRequestId);
       sendRpcResponse(copilotId, { messageId: `msg_${Date.now()}` });
@@ -125,7 +130,7 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
       sendLifecycleNotification("session.idle", sessionId);
       sendLifecycleNotification("session.updated", sessionId);
     }, ctx.FORWARD_RESPONSE_TIMEOUT_MS);
-    ctx.forwardTimeouts.set(acpRequestId, handle);
+    ctx.forwardTimeouts.set(acpRequestId, handleTimeout);
   }
 
   function tryHandle(payload: unknown): boolean {
@@ -183,7 +188,7 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
         return true;
       case "session.getMessages":
         sendRpcResponse(id, {
-          events: (ctx.copilotSessions.get(stringValue(params.sessionId) ?? ctx.lastCopilotSessionId ?? "")?.events ?? []),
+          events: (ctx.githubSessions.get(stringValue(params.sessionId) ?? ctx.lastGithubSessionId ?? "")?.events ?? []),
         });
         return true;
       case "session.destroy":
@@ -194,11 +199,11 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
         sendRpcResponse(id, {});
         return true;
       case "session.getLastId":
-        sendRpcResponse(id, { sessionId: ctx.lastCopilotSessionId });
+        sendRpcResponse(id, { sessionId: ctx.lastGithubSessionId });
         return true;
       case "session.list":
         sendRpcResponse(id, {
-          sessions: Array.from(ctx.copilotSessions.entries()).map(([sessionId, data]) => ({
+          sessions: Array.from(ctx.githubSessions.entries()).map(([sessionId, data]) => ({
             sessionId,
             startTime: new Date(data.createdAt).toISOString(),
             modifiedTime: new Date(data.modifiedAt).toISOString(),
@@ -208,10 +213,10 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
         });
         return true;
       case "session.getForeground":
-        sendRpcResponse(id, { sessionId: ctx.lastCopilotSessionId });
+        sendRpcResponse(id, { sessionId: ctx.lastGithubSessionId });
         return true;
       case "session.setForeground":
-        ctx.setLastCopilotSessionId(stringValue(params.sessionId) ?? ctx.lastCopilotSessionId);
+        ctx.setLastGithubSessionId(stringValue(params.sessionId) ?? ctx.lastGithubSessionId);
         sendRpcResponse(id, {});
         return true;
       default:
@@ -222,13 +227,13 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
   function handleCreateSession(id: string | number, params: Record<string, unknown>): void {
     const sessionId = stringValue(params.sessionId) ?? `session_${Date.now()}`;
     const now = Date.now();
-    ctx.copilotSessions.set(sessionId, {
+    ctx.githubSessions.set(sessionId, {
       createdAt: now,
       modifiedAt: now,
       summary: "Meshaway SDK session",
       events: [],
     });
-    ctx.setLastCopilotSessionId(sessionId);
+    ctx.setLastGithubSessionId(sessionId);
     sendRpcResponse(id, { sessionId });
     sendLifecycleNotification("session.created", sessionId);
     appendCopilotEvent(
@@ -246,23 +251,23 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
   }
 
   function handleResumeSession(id: string | number, params: Record<string, unknown>): void {
-    const sessionId = stringValue(params.sessionId) ?? ctx.lastCopilotSessionId ?? `session_${Date.now()}`;
-    if (!ctx.copilotSessions.has(sessionId)) {
-      ctx.copilotSessions.set(sessionId, {
+    const sessionId = stringValue(params.sessionId) ?? ctx.lastGithubSessionId ?? `session_${Date.now()}`;
+    if (!ctx.githubSessions.has(sessionId)) {
+      ctx.githubSessions.set(sessionId, {
         createdAt: Date.now(),
         modifiedAt: Date.now(),
         summary: "Meshaway SDK session",
         events: [],
       });
     }
-    ctx.setLastCopilotSessionId(sessionId);
+    ctx.setLastGithubSessionId(sessionId);
     sendRpcResponse(id, { sessionId });
   }
 
   function handleSend(id: string | number, params: Record<string, unknown>): void {
-    const sessionId = stringValue(params.sessionId) ?? ctx.lastCopilotSessionId ?? `session_${Date.now()}`;
-    if (!ctx.copilotSessions.has(sessionId)) {
-      ctx.copilotSessions.set(sessionId, {
+    const sessionId = stringValue(params.sessionId) ?? ctx.lastGithubSessionId ?? `session_${Date.now()}`;
+    if (!ctx.githubSessions.has(sessionId)) {
+      ctx.githubSessions.set(sessionId, {
         createdAt: Date.now(),
         modifiedAt: Date.now(),
         summary: "Meshaway SDK session",
@@ -276,7 +281,7 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
     sendLifecycleNotification("session.updated", sessionId);
 
     const acpRequestId = `acp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    ctx.acpIdToCopilotId.set(acpRequestId, id);
+    ctx.acpIdToGithubId.set(acpRequestId, id);
     ctx.acpIdToSessionId.set(acpRequestId, sessionId);
     ctx.setResponseBuffer("");
     ctx.writeToChild({
@@ -291,7 +296,7 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
   function handleDestroyOrDelete(id: string | number, params: Record<string, unknown>): void {
     const sessionId = stringValue(params.sessionId);
     if (sessionId) {
-      ctx.copilotSessions.delete(sessionId);
+      ctx.githubSessions.delete(sessionId);
       sendLifecycleNotification("session.deleted", sessionId);
     }
     sendRpcResponse(id, {});
@@ -308,4 +313,4 @@ export function createCopilotHandler(engine: ICopilotHandlerEngine) {
   };
 }
 
-export type CopilotHandler = ReturnType<typeof createCopilotHandler>;
+export type GithubHandler = ReturnType<typeof createGithubHandler>;

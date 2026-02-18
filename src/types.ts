@@ -1,7 +1,5 @@
 export type MeshMode = "github" | "claude" | "auto";
 export type ClientType = "github" | "claude";
-/** Provider for agent execution / translation (github, claude, gemini). */
-export type Provider = "github" | "claude" | "gemini";
 
 export type ActionStatus = "pending" | "approved" | "success" | "failed";
 export type PermissionDecision = "approved" | "denied" | "cancelled";

@@ -385,6 +385,7 @@ export class UnifiedTranslator {
   }
 
   private toClaudeEvent(normalized: NormalizedOutbound): unknown {
+    const sessionMeta = normalized.sessionId ? { session_id: normalized.sessionId } : {};
     switch (normalized.kind) {
       case "message_chunk":
         return {
@@ -392,14 +393,17 @@ export class UnifiedTranslator {
           subtype: "chunk",
           text: normalized.text ?? "",
           thought: normalized.thought,
-          usage: normalized.usage
+          ...(normalized.usage
             ? {
-                model: normalized.usage.model,
-                input_tokens: normalized.usage.inputTokens,
-                output_tokens: normalized.usage.outputTokens,
-                cache_creation_input_tokens: normalized.usage.cachedInputTokens,
+                usage: {
+                  model: normalized.usage.model,
+                  input_tokens: normalized.usage.inputTokens,
+                  output_tokens: normalized.usage.outputTokens,
+                  cache_creation_input_tokens: normalized.usage.cachedInputTokens,
+                },
               }
-            : undefined,
+            : {}),
+          ...sessionMeta,
         };
       case "tool_call":
         return {
@@ -409,9 +413,10 @@ export class UnifiedTranslator {
           title: normalized.title,
           command: normalized.command,
           status: normalized.status ?? "pending",
+          ...sessionMeta,
         };
       case "tool_call_update":
-        return { type: "tool", subtype: "update", id: normalized.toolCallId, status: normalized.status };
+        return { type: "tool", subtype: "update", id: normalized.toolCallId, status: normalized.status, ...sessionMeta };
       case "permission_request":
         return {
           type: "permission",
@@ -420,12 +425,14 @@ export class UnifiedTranslator {
           title: normalized.title,
           command: normalized.command,
           options: ["allow_once", "allow_session", "deny"],
+          ...sessionMeta,
         };
       case "response":
         return {
           type: "assistant",
           subtype: "final",
           stop_reason: normalized.stopReason ?? "end_turn",
+          ...sessionMeta,
         };
       case "error":
         return {
@@ -433,10 +440,12 @@ export class UnifiedTranslator {
           subtype: "acp",
           code: normalized.error?.code ?? -32000,
           message: normalized.error?.message ?? "Unknown ACP error",
+          ...(normalized.requestId !== undefined ? { request_id: normalized.requestId } : {}),
+          ...sessionMeta,
         };
       case "noop":
       default:
-        return { type: "noop" };
+        return { type: "noop", ...sessionMeta };
     }
   }
 

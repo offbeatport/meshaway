@@ -1,13 +1,8 @@
 import { createInterface } from "node:readline";
 import { UnifiedTranslator } from "../translator/translator.js";
 import { safeLog } from "../logging.js";
-import type {
-    ClientType,
-    MeshMode,
-    ObserverEvent,
-    PermissionDecisionInput,
-} from "../types.js";
-import type { Provider } from "../types.js";
+import type { ClientType, MeshMode, PermissionDecisionInput } from "../types.js";
+import type { PermissionRequestEvent } from "../types.js";
 import { ObserverEventBus } from "../ui/events.js";
 import { asRecord } from "./helpers.js";
 import type { ObserverTrackingContext } from "./observer-tracking.js";
@@ -20,44 +15,72 @@ import {
     spawnAgent as spawnAgentTransport,
     type StdinParseState,
 } from "./transport.js";
-import type { PermissionRequestEvent } from "../types.js";
-import { createCopilotHandler, type ICopilotHandlerEngine } from "./copilot-handler.js";
+import { createGithubHandler, type IClientHandlerEngine } from "./copilot-handler.js";
+import { createClaudeHandler } from "./claude-handler.js";
 
 export interface BridgeEngineOptions {
-    mode: MeshMode;
     clientType: MeshMode;
-    provider?: Provider;
+    /** Used when type is local: command to spawn. Ignored when agentUrl is set. */
     agentCommand: string;
+    /** Used when type is local: args for the command. Ignored when agentUrl is set. */
     agentArgs: string[];
     cwd: string;
     envAllowlist?: string[];
     eventBus?: ObserverEventBus;
+    /** When set, use HTTP POST to this URL instead of spawning a child (remote agent). */
+    agentUrl?: string;
+    /** Optional env var name for API key (e.g. OPENAI_API_KEY); sent as Bearer when set. */
+    apiKeyEnv?: string;
 }
 
 type PendingPermission = PermissionRequestEvent & { sessionId: string };
 
-const FORWARD_RESPONSE_TIMEOUT_MS = 5_000;
+const FORWARD_RESPONSE_TIMEOUT_MS = 95_000;
 
-export class BridgeEngine implements ICopilotHandlerEngine {
+const PERMISSION_OUTCOME: Record<PermissionDecisionInput["decision"], string> = {
+    approved: "allow_once",
+    cancelled: "cancelled",
+    denied: "deny",
+};
+
+type ClientHandler = {
+    tryHandle(parsed: unknown): boolean;
+    ensureInit?: () => void;
+};
+
+/**
+ * Multi-client bridge: stdio ↔ child ACP agent.
+ * Supports GitHub (Copilot) and Claude. Both have handlers: GitHub does session/init/ID mapping;
+ * Claude sends system init (session_id) once, then stream events. Add new clients in getHandler() and translateToAcp/FromAcp.
+ */
+export class BridgeEngine implements IClientHandlerEngine {
     readonly options: BridgeEngineOptions;
     readonly translator = new UnifiedTranslator();
     readonly eventBus?: ObserverEventBus;
     readonly pendingRequestIds = new Set<string | number>();
     readonly pendingPermissions = new Map<string, PendingPermission>();
-    readonly copilotSessions = new Map<
+    /** Session state for GitHub client (Copilot protocol). */
+    readonly githubSessions = new Map<
         string,
         { createdAt: number; modifiedAt: number; summary?: string; events: Record<string, unknown>[] }
     >();
-    lastCopilotSessionId: string | undefined = undefined;
-    readonly acpIdToCopilotId = new Map<string | number, string | number>();
+    lastGithubSessionId: string | undefined = undefined;
+    /** ACP request ID → GitHub client request ID (for response rewriting). */
+    readonly acpIdToGithubId = new Map<string | number, string | number>();
     readonly acpIdToSessionId = new Map<string | number, string>();
     responseBuffer = "";
     agentHandshakeSent = false;
     readonly forwardTimeouts = new Map<string | number, ReturnType<typeof setTimeout>>();
     readonly FORWARD_RESPONSE_TIMEOUT_MS = FORWARD_RESPONSE_TIMEOUT_MS;
 
-    setLastCopilotSessionId(id: string | undefined): void {
-        this.lastCopilotSessionId = id;
+    /** Claude: whether we've sent the system init (session_id) expected by the SDK. */
+    claudeInitSent = false;
+    setClaudeInitSent(v: boolean): void {
+        this.claudeInitSent = v;
+    }
+
+    setLastGithubSessionId(id: string | undefined): void {
+        this.lastGithubSessionId = id;
     }
     setResponseBuffer(s: string): void {
         this.responseBuffer = s;
@@ -75,7 +98,15 @@ export class BridgeEngine implements ICopilotHandlerEngine {
     };
     private started = false;
 
-    private readonly copilotHandler = createCopilotHandler(this);
+    private readonly githubHandler = createGithubHandler(this);
+    private readonly claudeHandler = createClaudeHandler(this);
+
+    /** Returns the handler for this client type (GitHub: session/init; Claude: system init). */
+    private getHandler(clientType: ClientType): ClientHandler | undefined {
+        if (clientType === "github") return this.githubHandler;
+        if (clientType === "claude") return this.claudeHandler;
+        return undefined;
+    }
 
     private get observerTrackingContext(): ObserverTrackingContext {
         return {
@@ -95,6 +126,11 @@ export class BridgeEngine implements ICopilotHandlerEngine {
     start(): void {
         if (this.started) return;
         this.started = true;
+        this.wireStdin();
+        if (this.options.agentUrl) {
+            // Remote agent: no child process; writeToChild will POST to agentUrl.
+            return;
+        }
         const env = buildChildEnv(this.options.envAllowlist);
         this.child = spawnAgentTransport(
             this.options.agentCommand,
@@ -102,7 +138,6 @@ export class BridgeEngine implements ICopilotHandlerEngine {
             this.options.cwd,
             env,
         );
-        this.wireStdin();
         this.wireChildStdout();
         this.wireChildStderr();
         this.wireChildLifecycle();
@@ -119,7 +154,7 @@ export class BridgeEngine implements ICopilotHandlerEngine {
             params: {
                 sessionId: pending.sessionId,
                 permissionId: input.id,
-                outcome: input.decision === "approved" ? "allow_once" : input.decision === "cancelled" ? "cancelled" : "deny",
+                outcome: PERMISSION_OUTCOME[input.decision],
             },
         });
         for (const message of acpMessages) this.writeToChild(message);
@@ -144,57 +179,59 @@ export class BridgeEngine implements ICopilotHandlerEngine {
     private wireChildStdout(): void {
         if (!this.child?.stdout) return;
         const rl = createInterface({ input: this.child.stdout, crlfDelay: Infinity });
-        rl.on("line", (line) => {
-            const trimmed = line.trim();
-            if (!trimmed) return;
-            let parsed: unknown;
-            try {
-                parsed = JSON.parse(trimmed);
-            } catch {
-                safeLog("Child emitted non-JSON stdout line", { line: trimmed });
-                return;
-            }
-            const clientType = this.resolveCurrentClientType();
-            const translated =
-                clientType === "github" ? this.translator.acpToGithub(parsed) : this.translator.acpToClaude(parsed);
-            for (const message of translated) {
-                trackOutbound(this.observerTrackingContext, message, clientType);
-                const outMsg = this.rewriteResponseIdForClient(message);
-                this.writeClientMessage(outMsg);
-            }
-        });
+        rl.on("line", (line) => this.pushAgentLine(line.trim()));
+    }
+
+    /** Process one line of agent output (from child stdout or remote HTTP response). */
+    private pushAgentLine(trimmed: string): void {
+        if (!trimmed) return;
+        const parsed = this.parseJson(trimmed);
+        if (parsed === null) {
+            safeLog("Agent emitted non-JSON line", { line: trimmed });
+            return;
+        }
+        const clientType = this.getClientType();
+        this.getHandler(clientType)?.ensureInit?.();
+        for (const message of this.translateFromAcp(parsed, clientType)) {
+            trackOutbound(this.observerTrackingContext, message, clientType);
+            this.writeClientMessage(this.rewriteResponseIdForClient(message));
+        }
     }
 
     private rewriteResponseIdForClient(message: unknown): unknown {
         const record = asRecord(message);
         const id = record.id;
         if (id === undefined || (typeof id !== "string" && typeof id !== "number")) return message;
-        const hasResult = "result" in record && record.result !== undefined;
-        const hasError = "error" in record && record.error !== undefined;
-        if (!hasResult && !hasError) return message;
-        const copilotId = this.acpIdToCopilotId.get(id);
-        if (copilotId === undefined) return message;
+        if (!("result" in record && record.result !== undefined) && !("error" in record && record.error !== undefined)) {
+            return message;
+        }
+        const githubId = this.acpIdToGithubId.get(id);
+        if (githubId === undefined) return message;
         this.clearForwardTimeout(id);
         const sessionId = this.acpIdToSessionId.get(id);
-        this.acpIdToCopilotId.delete(id);
+        this.acpIdToGithubId.delete(id);
         this.acpIdToSessionId.delete(id);
         this.pendingRequestIds.delete(id);
-        if (sessionId && this.copilotSessions.has(sessionId)) {
-            const content = this.responseBuffer || "[Agent response]";
-            this.responseBuffer = "";
-            const assistantEvent = this.copilotHandler.makeCopilotEvent("assistant.message", {
-                messageId: `msg_${Date.now()}`,
-                content,
-            });
-            const idleEvent = this.copilotHandler.makeCopilotEvent("session.idle", {}, true);
-            this.copilotHandler.appendCopilotEvent(sessionId, assistantEvent);
-            this.copilotHandler.sendSessionEventNotification(sessionId, assistantEvent);
-            this.copilotHandler.appendCopilotEvent(sessionId, idleEvent);
-            this.copilotHandler.sendSessionEventNotification(sessionId, idleEvent);
-            this.copilotHandler.sendLifecycleNotification("session.idle", sessionId);
-            this.copilotHandler.sendLifecycleNotification("session.updated", sessionId);
+        if (sessionId && this.githubSessions.has(sessionId)) {
+            this.emitGithubResponseEvents(sessionId);
         }
-        return { ...record, id: copilotId };
+        return { ...record, id: githubId };
+    }
+
+    private emitGithubResponseEvents(sessionId: string): void {
+        const content = this.responseBuffer || "[Agent response]";
+        this.responseBuffer = "";
+        const assistantEvent = this.githubHandler.makeCopilotEvent("assistant.message", {
+            messageId: `msg_${Date.now()}`,
+            content,
+        });
+        const idleEvent = this.githubHandler.makeCopilotEvent("session.idle", {}, true);
+        this.githubHandler.appendCopilotEvent(sessionId, assistantEvent);
+        this.githubHandler.sendSessionEventNotification(sessionId, assistantEvent);
+        this.githubHandler.appendCopilotEvent(sessionId, idleEvent);
+        this.githubHandler.sendSessionEventNotification(sessionId, idleEvent);
+        this.githubHandler.sendLifecycleNotification("session.idle", sessionId);
+        this.githubHandler.sendLifecycleNotification("session.updated", sessionId);
     }
 
     private wireChildStderr(): void {
@@ -208,10 +245,10 @@ export class BridgeEngine implements ICopilotHandlerEngine {
             if (code === 0) return;
             safeLog("Child agent exited unexpectedly", { code, signal });
             const message = `Child agent crashed (code: ${code ?? "null"}, signal: ${signal ?? "none"})`;
-            const clientType = this.resolveCurrentClientType();
+            const clientType = this.getClientType();
             for (const acpId of this.pendingRequestIds) {
-                const clientId = this.acpIdToCopilotId.get(acpId) ?? acpId;
-                this.acpIdToCopilotId.delete(acpId);
+                const clientId = this.acpIdToGithubId.get(acpId) ?? acpId;
+                this.acpIdToGithubId.delete(acpId);
                 this.writeClientMessage(this.translator.buildCrashResponse(clientType, clientId, message));
             }
             this.pendingRequestIds.clear();
@@ -219,10 +256,6 @@ export class BridgeEngine implements ICopilotHandlerEngine {
     }
 
     writeToChild(message: unknown, options?: { skipTracking?: boolean }): void {
-        if (!this.child?.stdin) {
-            safeLog("Cannot write to child, stdin unavailable");
-            return;
-        }
         const record = asRecord(message);
         if (
             !options?.skipTracking &&
@@ -231,7 +264,65 @@ export class BridgeEngine implements ICopilotHandlerEngine {
         ) {
             this.pendingRequestIds.add(record.id);
         }
+        const url = this.options.agentUrl;
+        if (url) {
+            this.sendRemoteMessage(url, message);
+            return;
+        }
+        if (!this.child?.stdin) {
+            safeLog("Cannot write to child, stdin unavailable");
+            return;
+        }
         this.child.stdin.write(`${JSON.stringify(message)}\n`);
+    }
+
+    private sendRemoteMessage(baseUrl: string, message: unknown): void {
+        const record = asRecord(message);
+        const body = JSON.stringify(message);
+        const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+        };
+        const apiKey = this.options.apiKeyEnv && process.env[this.options.apiKeyEnv];
+        if (apiKey) {
+            headers["Authorization"] = `Bearer ${apiKey}`;
+        }
+        const endpoint = baseUrl.replace(/\/$/, "");
+        fetch(endpoint, {
+            method: "POST",
+            headers,
+            body,
+        })
+            .then(async (res) => {
+                const text = await res.text();
+                if (!res.ok) {
+                    const errMsg = `Remote agent HTTP ${res.status}: ${text.slice(0, 200)}`;
+                    this.emitRemoteError(record.id, errMsg);
+                    return;
+                }
+                // Response: single JSON line or NDJSON (one JSON object per line).
+                const lines = text.split("\n").map((s) => s.trim()).filter(Boolean);
+                if (lines.length === 0) return;
+                for (const line of lines) {
+                    this.pushAgentLine(line);
+                }
+            })
+            .catch((err: unknown) => {
+                const errMsg = err instanceof Error ? err.message : String(err);
+                this.emitRemoteError(record.id, `Remote agent request failed: ${errMsg}`);
+            });
+    }
+
+    private emitRemoteError(requestId: unknown, message: string): void {
+        safeLog("Remote agent error", { requestId, message });
+        if (requestId !== undefined && (typeof requestId === "string" || typeof requestId === "number")) {
+            this.pendingRequestIds.delete(requestId);
+            const clientId = this.acpIdToGithubId.get(requestId) ?? requestId;
+            this.acpIdToGithubId.delete(requestId);
+            this.acpIdToSessionId.delete(requestId);
+            this.clearForwardTimeout(requestId);
+            const clientType = this.getClientType();
+            this.writeClientMessage(this.translator.buildCrashResponse(clientType, clientId, message));
+        }
     }
 
     writeClientMessage(message: unknown): void {
@@ -240,26 +331,48 @@ export class BridgeEngine implements ICopilotHandlerEngine {
         );
     }
 
-    private resolveClientType(parsed: unknown): ClientType {
-        if (this.options.clientType === "github" || this.options.mode === "github") {
-            this.detectedClientType = "github";
-            return "github";
+    /** Resolve client type: from clientType, then cached detection, then infer from parsed message (inbound). */
+    private getClientType(parsed?: unknown): ClientType {
+        const mode = this.options.clientType;
+
+        switch (mode) {
+            case "github":
+                this.detectedClientType = "github";
+                return "github";
+            case "claude":
+                this.detectedClientType = "claude";
+                return "claude";
+            case "auto":
+                break;
         }
-        if (this.options.clientType === "claude" || this.options.mode === "claude") {
-            this.detectedClientType = "claude";
-            return "claude";
+
+        if (this.detectedClientType) {
+            return this.detectedClientType;
         }
-        if (this.detectedClientType) return this.detectedClientType;
-        const asRec = typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : {};
-        this.detectedClientType = asRec.jsonrpc === "2.0" ? "github" : "claude";
-        return this.detectedClientType;
+
+        if (parsed !== undefined) {
+            const rec = typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : {};
+            this.detectedClientType = rec.jsonrpc === "2.0" ? "github" : "claude";
+            return this.detectedClientType;
+        }
+
+        return "github";
     }
 
-    private resolveCurrentClientType(): ClientType {
-        if (this.options.clientType === "github") return "github";
-        if (this.options.clientType === "claude") return "claude";
-        if (this.options.clientType === "auto" && this.options.provider === "gemini") return "claude";
-        return this.detectedClientType ?? "github";
+    private translateToAcp(parsed: unknown, clientType: ClientType): unknown[] {
+        return clientType === "github" ? this.translator.githubToAcp(parsed) : this.translator.claudeToAcp(parsed);
+    }
+
+    private translateFromAcp(parsed: unknown, clientType: ClientType): unknown[] {
+        return clientType === "github" ? this.translator.acpToGithub(parsed) : this.translator.acpToClaude(parsed);
+    }
+
+    private parseJson(raw: string): unknown | null {
+        try {
+            return JSON.parse(raw);
+        } catch {
+            return null;
+        }
     }
 
     private clearForwardTimeout(acpRequestId: string | number): void {
@@ -271,21 +384,16 @@ export class BridgeEngine implements ICopilotHandlerEngine {
     }
 
     private handleInboundJson(raw: string): void {
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(raw);
-        } catch {
+        const parsed = this.parseJson(raw);
+        if (parsed === null) {
             safeLog("Skipping non-JSON stdin payload");
             return;
         }
-        const clientType = this.resolveClientType(parsed);
-        if (clientType === "github" && this.copilotHandler.tryHandle(parsed)) return;
-        const outbound =
-            clientType === "github" ? this.translator.githubToAcp(parsed) : this.translator.claudeToAcp(parsed);
-        for (const message of outbound) {
+        const clientType = this.getClientType(parsed);
+        if (this.getHandler(clientType)?.tryHandle(parsed)) return;
+        for (const message of this.translateToAcp(parsed, clientType)) {
             trackInbound(this.observerTrackingContext, parsed, clientType);
             this.writeToChild(message);
         }
     }
 }
-

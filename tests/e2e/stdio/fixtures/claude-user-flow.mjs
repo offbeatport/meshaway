@@ -1,5 +1,5 @@
 import path from "node:path";
-import { access, chmod } from "node:fs/promises";
+import { access, chmod, rm } from "node:fs/promises";
 import { execSync } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
@@ -7,11 +7,13 @@ const projectRoot = process.cwd();
 const meshCliPath = path.join(projectRoot, "dist", "meshaway.cjs");
 
 async function ensureMeshBuilt() {
+  // Always rebuild for e2e to ensure we test the latest dist.
   try {
-    await access(meshCliPath);
+    await rm(path.join(projectRoot, "dist"), { recursive: true, force: true });
   } catch {
-    execSync("npm run build", { cwd: projectRoot, stdio: "ignore" });
+    // ignore
   }
+  execSync("npm run build", { cwd: projectRoot, stdio: "ignore" });
   await chmod(meshCliPath, 0o755);
 }
 

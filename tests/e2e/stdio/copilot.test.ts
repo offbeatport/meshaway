@@ -7,6 +7,10 @@ test("Copilot stdio: full flow (SDK → meshaway stdio → bridge → agent)", a
     { MESHAWAY_DEBUG_ARGS: "1" },
   );
 
+  console.log(result.stdout)
+  console.log(result.stderr)
+  console.log(result.code)
+
   expect(result.code, result.stderr + result.stdout).toBe(0);
   expect(result.stdout).toContain("COPILOT_FLOW_OK");
 });

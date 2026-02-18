@@ -1,5 +1,5 @@
 import path from "node:path";
-import { access, chmod } from "node:fs/promises";
+import { access, chmod, rm } from "node:fs/promises";
 import { execSync } from "node:child_process";
 import { CopilotClient } from "@github/copilot-sdk";
 
@@ -7,11 +7,13 @@ const projectRoot = process.cwd();
 const meshCliPath = path.join(projectRoot, "dist", "meshaway.cjs");
 
 async function ensureMeshBuilt() {
+  // Always rebuild for e2e to ensure we test the latest dist.
   try {
-    await access(meshCliPath);
+    await rm(path.join(projectRoot, "dist"), { recursive: true, force: true });
   } catch {
-    execSync("npm run build", { cwd: projectRoot, stdio: "ignore" });
+    // ignore
   }
+  execSync("npm run build", { cwd: projectRoot, stdio: "ignore" });
   await chmod(meshCliPath, 0o755);
 }
 
@@ -23,11 +25,12 @@ await ensureMeshBuilt();
 
 const client = new CopilotClient({
   cliPath: meshCliPath,
+  cliArgs: ["--agent-command", "opencode", "--agent-args", "acp"],
   useStdio: true,
   autoRestart: false,
   useLoggedInUser: false,
   githubToken: "mesh-test-token",
-  logLevel: "error",
+  logLevel: "debug",
 });
 
 try {
@@ -45,13 +48,12 @@ try {
     typeof reply?.data?.content === "string" &&
     reply.data.content.includes("Mesh received:") &&
     events.some((event) => event.type === "assistant.message");
-
   if (!ok) {
     process.stdout.write("COPILOT_FLOW_FAIL\n");
     process.exit(2);
   }
 
-  process.stdout.write("COPILOT_FLOW_OK\n");
+  process.stdout.write(`COPILOT_FLOW_OK: ${JSON.stringify(events)}\n`);
 } catch (error) {
   process.stdout.write(
     `COPILOT_FLOW_ERROR:${error instanceof Error ? error.message : String(error)}\n`,

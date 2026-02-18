@@ -11,16 +11,36 @@ npm install
 npm run build
 ```
 
-Run bridge mode:
+### Basic stdio bridge
 
-```bash
-meshaway start --mode auto --client-type auto --agent-command cat
+In practice Meshaway sits between an SDK (on stdio) and a local ACP agent:
+
+```text
+GitHub Copilot / Claude Code (SDK)
+        ⇅  stdio (clientType: github|claude)
+      meshaway (bridge: translator + handlers)
+        ⇅  stdio (ACP)
+      local ACP agent (any backend: github/claude/gemini/llama/…)
 ```
 
-Run Observer UI mode:
+- **Inbound**: SDK sends messages in its native protocol (GitHub JSON‑RPC or Claude stream).  
+  Meshaway normalizes them and converts to ACP envelopes for your agent.
+- **Agent**: your ACP agent talks to whatever backend you choose.
+- **Outbound**: ACP responses are normalized and translated back into the same `clientType`
+  protocol the SDK expects (GitHub or Claude).
+
+Run the stdio bridge with a local agent:
 
 ```bash
-meshaway ui --mode auto --client-type auto --agent-command cat
+meshaway --client-type auto --agent-command cat
+```
+
+### Observer UI mode
+
+You can start the bridge together with the Observer dashboard:
+
+```bash
+meshaway serve --ui
 ```
 
 The UI opens automatically in your browser on `localhost` (default port starts at `1618`) with a session token in the URL.
