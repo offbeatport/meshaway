@@ -106,11 +106,7 @@ export const AcpRequestSchema = type({
   jsonrpc: "'2.0'",
   id: "string | number",
   method:
-    | "'initialize'"
-    | "'session/new'"
-    | "'session/prompt'"
-    | "'session/cancel'"
-    | "'session/request_permission'",
+    "'initialize' | 'session/new' | 'session/prompt' | 'session/cancel' | 'session/request_permission'",
   params: "unknown",
 });
 

@@ -3,24 +3,17 @@
  */
 
 import { createInterface } from "node:readline";
-
-function getRequestId(payload: unknown): string | number | undefined {
-  if (payload === null || typeof payload !== "object") return undefined;
-  const rec = payload as Record<string, unknown>;
-  const id = rec.id;
-  if (id === undefined) return undefined;
-  if (typeof id === "string" || typeof id === "number") return id;
-  return undefined;
-}
+import { BridgeEngine } from "./engine.js";
 
 function writeResponse(obj: unknown): void {
   process.stdout.write(JSON.stringify(obj) + "\n");
 }
 
-export function runStdioBridge(): void {
+export function runStdioBridge(backend?: string): void {
+  const engine = new BridgeEngine({ backend });
   const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 
-  rl.on("line", (line) => {
+  rl.on("line", async (line) => {
     let body: unknown;
     try {
       body = JSON.parse(line) as unknown;
@@ -33,38 +26,11 @@ export function runStdioBridge(): void {
       return;
     }
 
-    const requestId = getRequestId(body);
-    if (requestId === undefined) {
-      writeResponse({
-        jsonrpc: "2.0",
-        id: null,
-        error: { code: -32600, message: "Invalid request" },
-      });
-      return;
+    const handled = await engine.handleIncoming(body);
+    if (handled.payload) {
+      writeResponse(handled.payload);
     }
-
-    const rec = body as Record<string, unknown>;
-    const method = rec.method as string;
-
-    if (method === "initialize") {
-      writeResponse({
-        jsonrpc: "2.0",
-        id: requestId,
-        result: {
-          protocolVersion: 1,
-          serverInfo: { name: "meshaway", version: "0.1.0" },
-        },
-      });
-      return;
-    }
-
-    writeResponse({
-      jsonrpc: "2.0",
-      id: requestId,
-      error: {
-        code: -32601,
-        message: `Method not implemented: ${method}`,
-      },
-    });
   });
+
+  rl.on("close", () => engine.close());
 }

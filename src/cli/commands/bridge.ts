@@ -3,6 +3,7 @@ import { runStdioBridge } from "../../bridge/stdio.js";
 import { initLogger } from "../../shared/logging.js";
 import { DEFAULT_BRIDGE_LISTEN } from "../../shared/constants.js";
 import { getEnv } from "../../shared/env.js";
+import { EXIT } from "../../shared/errors.js";
 
 export async function runBridge(
   opts: Record<string, unknown>
@@ -15,15 +16,16 @@ export async function runBridge(
   const transport = String((opts.transport as string) || "tcp");
   const listen = (opts.listen as string) || getEnv("LISTEN") || DEFAULT_BRIDGE_LISTEN;
   const hubUrl = opts.noHub ? undefined : ((opts.hub as string) || getEnv("HUB"));
+  const backend = (opts.backend as string) || getEnv("BACKEND");
 
   if (transport === "stdio") {
-    runStdioBridge();
+    runStdioBridge(backend ?? undefined);
     return;
   }
 
   const handle = await startBridgeServer(listen, {
     hubUrl,
-    backend: (opts.backend as string) || getEnv("BACKEND"),
+    backend: backend ?? undefined,
   });
 
   process.stderr.write(`Bridge URL:  http://${handle.host}:${handle.port}\n`);

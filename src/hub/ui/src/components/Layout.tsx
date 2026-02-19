@@ -1,10 +1,11 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { Cpu, Activity, Wifi, WifiOff, ShieldCheck, Route, Stethoscope } from "lucide-react";
+import { Cpu, Activity, Wifi, WifiOff, ShieldCheck, Route, Stethoscope, Play } from "lucide-react";
 import { useHealth } from "@/lib/useApi";
 
 const navItems = [
   { to: "/", label: "Home" },
   { to: "/sessions", label: "Sessions", icon: Activity },
+  { to: "/playground", label: "Playground", icon: Play },
   { to: "/approvals", label: "Approvals", icon: ShieldCheck },
   { to: "/routing", label: "Routing", icon: Route },
   { to: "/system", label: "Health", icon: Stethoscope },

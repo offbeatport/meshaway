@@ -10,8 +10,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { useState, useCallback } from "react";
-import * as Collapsible from "@base-ui/react/collapsible";
-import * as Tabs from "@base-ui/react/tabs";
+import { Collapsible } from "@base-ui/react/collapsible";
+import { Tabs } from "@base-ui/react/tabs";
 import { useSession } from "@/lib/useApi";
 import { formatDateTime, formatTime } from "@/lib/format";
 import type { Frame } from "@/lib/api";

@@ -113,3 +113,78 @@ export async function setRoutingBackend(backend: string): Promise<boolean> {
   const data = await res.json();
   return data?.ok === true;
 }
+
+export interface PlaygroundSendParams {
+  prompt: string;
+  sessionId?: string;
+  bridgeUrl?: string;
+  faultLatency?: number;
+  faultDrop?: boolean;
+  faultError?: string;
+}
+
+export interface PlaygroundSendResult {
+  jsonrpc: string;
+  id: number;
+  result?: { sessionId?: string; [key: string]: unknown };
+  error?: { code: number; message: string; data?: unknown };
+}
+
+export async function sendPlaygroundPrompt(
+  params: PlaygroundSendParams
+): Promise<PlaygroundSendResult> {
+  const res = await fetch(`${API_BASE}/playground/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message ?? `Request failed: ${res.status}`);
+  return data;
+}
+
+export interface PlaygroundRpcParams {
+  method: string;
+  params?: unknown;
+  id?: number;
+  bridgeUrl?: string;
+  faultLatency?: number;
+  faultDrop?: boolean;
+  faultError?: string;
+}
+
+export async function sendPlaygroundRpc(
+  params: PlaygroundRpcParams
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/playground/rpc`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message ?? `Request failed: ${res.status}`);
+  return data;
+}
+
+export function getSessionExportUrl(sessionId: string): string {
+  return `${API_BASE}/sessions/${sessionId}/export`;
+}
+
+export interface ReplayEntry {
+  method: string;
+  params?: unknown;
+}
+
+export async function replayPlayground(
+  entries: ReplayEntry[],
+  bridgeUrl?: string
+): Promise<{ results: unknown[] }> {
+  const res = await fetch(`${API_BASE}/playground/replay`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entries, bridgeUrl }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error ?? `Replay failed: ${res.status}`);
+  return data;
+}

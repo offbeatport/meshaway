@@ -34,6 +34,27 @@ Then:
 - `MESH_HUB` — Hub URL (when bridge connects)
 - `MESH_HUB_LISTEN` — Hub listen address
 
+## Documentation
+
+| Doc | Description |
+| ----- | ----------- |
+| [docs/copilot.md](docs/copilot.md) | GitHub Copilot SDK integration |
+| [docs/acp.md](docs/acp.md) | ACP agent backends |
+| [docs/hub.md](docs/hub.md) | Hub API and UI |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Common issues and fixes |
+
+## Native binary
+
+Build a single executable with the UI bundled:
+
+```bash
+pnpm run build:native
+```
+
+Output: `release/meshaway` (or `release/meshaway.exe` on Windows). The executable includes the Hub UI; no `dist/ui` directory is required at runtime.
+
+**Note:** SEA (Single Executable Application) requires Node.js 25.5+. If unavailable, the script copies `release/meshaway.mjs`; run with `node release/meshaway.mjs`.
+
 ## Tech stack
 
 - **CLI**: Commander, Chalk

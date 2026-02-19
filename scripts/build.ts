@@ -1,5 +1,5 @@
 /**
- * Build Node CLI -> dist/node, UI -> dist/ui.
+ * Build Node CLI -> dist/node, UI -> dist/ui, embed UI for native binary.
  * Usage: pnpm exec tsx scripts/build.ts
  */
 
@@ -11,6 +11,20 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
+
+async function buildUi() {
+  execSync(`pnpm exec vite build --config ${join(root, "src", "hub", "ui", "vite.config.ts")}`, {
+    cwd: root,
+    stdio: "inherit",
+  });
+}
+
+async function embedUi() {
+  execSync(`pnpm exec tsx ${join(root, "scripts", "embed-ui.ts")}`, {
+    cwd: root,
+    stdio: "inherit",
+  });
+}
 
 async function buildNode() {
   const outDir = join(root, "dist", "node");
@@ -30,16 +44,10 @@ async function buildNode() {
   });
 }
 
-async function buildUi() {
-  execSync(`pnpm exec vite build --config ${join(root, "src", "hub", "ui-app", "vite.config.ts")}`, {
-    cwd: root,
-    stdio: "inherit",
-  });
-}
-
 async function main() {
-  await buildNode();
   await buildUi();
+  await embedUi();
+  await buildNode();
 }
 
 main().catch((err) => {

@@ -17,4 +17,13 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      "/api": process.env.MESH_HUB_URL ?? "http://127.0.0.1:7337",
+      "/health": process.env.MESH_HUB_URL ?? "http://127.0.0.1:7337",
+    },
+  },
 });

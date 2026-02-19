@@ -6,7 +6,7 @@
  * Usage: pnpm exec tsx scripts/package-release.ts
  */
 
-import { copyFileSync, mkdirSync, existsSync } from "node:fs";
+import { copyFileSync, mkdirSync, existsSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -55,9 +55,19 @@ async function main() {
   const ok = await trySeaBuild();
   if (ok) {
     console.log(`SEA binary written to release/${outputName}`);
+    console.log("Run: ./release/meshaway");
   } else {
-    console.log("SEA build skipped (Node --build-sea may require Node 25.5+).");
-    console.log("Use: node release/meshaway.mjs to run.");
+    // Create shell launcher so ./meshaway works (avoids macOS killing direct .mjs exec)
+    if (!isWindows) {
+      const launcher = join(releaseDir, "meshaway");
+      const launcherScript = `#!/bin/sh
+exec node "$(dirname "$0")/meshaway.mjs" "$@"
+`;
+      writeFileSync(launcher, launcherScript, "utf8");
+      chmodSync(launcher, 0o755);
+      console.log("Created release/meshaway launcher");
+    }
+    console.log("Run: ./release/meshaway  or  node release/meshaway.mjs");
   }
 }
 

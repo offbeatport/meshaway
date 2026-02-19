@@ -6,6 +6,7 @@ import { SessionDetail } from "./pages/SessionDetail";
 import { Approvals } from "./pages/Approvals";
 import { Routing } from "./pages/Routing";
 import { System } from "./pages/System";
+import { Playground } from "./pages/Playground";
 
 const router = createBrowserRouter([
   {
@@ -18,6 +19,7 @@ const router = createBrowserRouter([
       { path: "approvals", element: <Approvals /> },
       { path: "routing", element: <Routing /> },
       { path: "system", element: <System /> },
+      { path: "playground", element: <Playground /> },
     ],
   },
 ]);

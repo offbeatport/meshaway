@@ -80,7 +80,9 @@ export function createProgram(): Command {
       );
 
       const { openBrowser } = await import("./utils.js");
-      openBrowser(hubUrl);
+      if (process.env.MESH_NO_OPEN_BROWSER !== "1") {
+        openBrowser(hubUrl);
+      }
 
       await new Promise<void>((_, reject) => {
         const closeAll = () =>

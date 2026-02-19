@@ -34,6 +34,21 @@ class MemoryStore {
     return session;
   }
 
+  ensureSession(id: string): Session {
+    const existing = this.sessions.get(id);
+    if (existing) return existing;
+    const now = Date.now();
+    const session: Session = {
+      id,
+      createdAt: now,
+      updatedAt: now,
+      status: "active",
+      frames: [],
+    };
+    this.sessions.set(id, session);
+    return session;
+  }
+
   getSession(id: string): Session | undefined {
     return this.sessions.get(id);
   }
