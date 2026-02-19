@@ -1,9 +1,0 @@
-{
-  "main": "dist/meshaway.cjs",
-  "output": "release/meshaway",
-  "disableExperimentalSEAWarning": true,
-  "assets": {
-    "ui/dashboard.js": "dist/ui/dashboard.js",
-    "ui/index.css": "dist/ui/index.css"
-  }
-}

@@ -1,67 +1,48 @@
 # Meshaway
 
-Meshaway makes your AI agents transparent, auditable, and portable. Build on the SDK you love, run on the model you need, and watch it all in the client you prefer.
+High-performance protocol bridge for agentic tools. Swap backends freely: ACP agents (Gemini CLI, OpenCode), OpenAI-compatible gateways (Ollama/vLLM/LiteLLM), or enterprise endpoints.
 
-Local CLI bridge that normalizes GitHub/Claude-style streams into ACP, with an optional local Observer dashboard.
-
-## Quick Start
+## Quick start
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
+npx meshaway
 ```
 
-### Basic stdio bridge
+Then:
+- **Hub UI**: http://127.0.0.1:7337
+- **Bridge URL**: http://127.0.0.1:4321
+- **Copilot SDK**: set `cliUrl = http://127.0.0.1:4321`
 
-In practice Meshaway sits between an SDK (on stdio) and a local ACP agent:
+## Commands
 
-```text
-GitHub Copilot / Claude Code (SDK)
-        ⇅  stdio (clientType: github|claude)
-      meshaway (bridge: translator + handlers)
-        ⇅  stdio (ACP)
-      local ACP agent (any backend: github/claude/gemini/llama/…)
-```
+| Command | Description |
+|---------|-------------|
+| `meshaway` | Start Hub + Bridge (default) |
+| `meshaway hub` | Start Hub only |
+| `meshaway bridge` | Start Bridge only |
+| `meshaway bridge --transport stdio` | Bridge in stdio mode (for cliPath) |
+| `meshaway bridge --no-hub` | Standalone bridge |
+| `meshaway doctor` | Environment checks |
+| `meshaway status` | Runtime status |
 
-- **Inbound**: SDK sends messages in its native protocol (GitHub JSON‑RPC or Claude stream).  
-  Meshaway normalizes them and converts to ACP envelopes for your agent.
-- **Agent**: your ACP agent talks to whatever backend you choose.
-- **Outbound**: ACP responses are normalized and translated back into the same `clientType`
-  protocol the SDK expects (GitHub or Claude).
+## Environment
 
-Run the stdio bridge with a local agent:
+- `MESH_BACKEND` — Backend specifier (`acp:gemini-cli`, `openai-compat:http://127.0.0.1:11434/v1`)
+- `MESH_LISTEN` — Bridge listen address
+- `MESH_HUB` — Hub URL (when bridge connects)
+- `MESH_HUB_LISTEN` — Hub listen address
 
-```bash
-meshaway --client-type auto --agent-command cat
-```
+## Tech stack
 
-### Observer UI mode
+- **CLI**: Commander, Chalk
+- **Server**: Hono
+- **Validation**: ArkType
+- **Logging**: Pino
+- **UI**: React, Base UI, Tailwind, Lucide React
+- **Testing**: Vitest
 
-You can start the bridge together with the Observer dashboard:
+## License
 
-```bash
-meshaway serve --ui
-```
-
-The UI opens automatically in your browser on `localhost` (default port starts at `1618`) with a session token in the URL.
-
-## Single Executable (Node.js SEA)
-
-Build a standalone binary with [Node.js Single Executable Applications](https://nodejs.org/api/single-executable-applications.html):
-
-```bash
-npm install
-npm run build:native
-./release/meshaway start --mode auto --client-type auto --agent-command cat
-```
-
-- **Node 25.5+**: uses built-in `node --build-sea`.
-- **Node 20.6–25.x**: uses `--experimental-sea-config` and [postject](https://github.com/nodejs/postject) (installed as a devDependency).
-
-On Windows the output is `release/meshaway.exe`. On macOS the binary is ad-hoc signed so it can run locally.
-
-For the Observer UI:
-
-```bash
-./release/meshaway ui --mode auto --client-type auto --agent-command cat
-```
+Apache-2.0

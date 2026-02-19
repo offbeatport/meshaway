@@ -3,24 +3,21 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
     "strict": true,
-    "skipLibCheck": true,
     "esModuleInterop": true,
+    "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
-    "declaration": false,
+    "declaration": true,
+    "declarationMap": true,
     "sourceMap": true,
+    "outDir": "dist/node",
+    "rootDir": "src",
+    "noEmit": true,
     "jsx": "react-jsx",
-    "types": [
-      "node"
-    ],
-    "outDir": "dist"
+    "types": ["node"]
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "tests/**/*.ts",
-    "esbuild.config.mjs"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "release", "src/hub/ui-app"]
 }
