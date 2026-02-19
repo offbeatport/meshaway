@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { EXIT, exit } from "../shared/errors.js";
 import { sessionStore } from "./store/memory.js";
-import { resolveApproval } from "./governance/approvals.js";
+import { resolveApproval, listPendingApprovals } from "./governance/approvals.js";
+import { getDefaultBackend } from "./governance/policy.js";
 
 function findUiDir(): string | null {
   const abs = join(process.cwd(), "dist", "ui");
@@ -30,6 +31,21 @@ export function createHubApp(): Hono {
   const app = new Hono();
 
   app.get("/health", (c) => c.json({ ok: true }));
+  app.get("/api/health", async (c) => {
+    const backend = getDefaultBackend();
+    return c.json({
+      hub: true,
+      backend: backend ?? "not configured",
+      bridgeUrl: "http://127.0.0.1:4321",
+    });
+  });
+  app.get("/api/approvals", (c) =>
+    c.json(listPendingApprovals())
+  );
+  app.get("/api/routing/rules", (c) => {
+    const backend = getDefaultBackend();
+    return c.json({ rules: backend ? [{ backend }] : [] });
+  });
   app.get("/api/sessions", (c) => c.json(sessionStore.listSessions()));
   app.post("/api/sessions", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as { sessionId?: string };
@@ -71,6 +87,9 @@ export function createHubApp(): Hono {
     app.use("/assets/*", serveStatic({ root: uiDir }));
     app.get("/", serveStatic({ path: "index.html", root: uiDir }));
     app.get("/sessions/*", serveStatic({ path: "index.html", root: uiDir }));
+    app.get("/approvals", serveStatic({ path: "index.html", root: uiDir }));
+    app.get("/routing", serveStatic({ path: "index.html", root: uiDir }));
+    app.get("/system", serveStatic({ path: "index.html", root: uiDir }));
   } else {
     app.get("/", (c) =>
       c.html(

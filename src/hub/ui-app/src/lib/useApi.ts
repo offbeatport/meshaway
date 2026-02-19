@@ -5,8 +5,14 @@ import {
   fetchFrames,
   killSession,
   checkHealth,
+  fetchHealthInfo,
+  fetchApprovals,
+  resolveApproval as apiResolveApproval,
+  fetchRoutingRules,
+  setRoutingBackend,
   type Session,
   type Frame,
+  type PendingApproval,
 } from "./api";
 
 export function useSessions(refreshInterval = 3000) {
@@ -115,4 +121,104 @@ export function useHealth(refreshInterval = 5000) {
   }, [refreshInterval]);
 
   return healthy;
+}
+
+export function useHealthInfo() {
+  const [healthInfo, setHealthInfo] = useState<{
+    hub: boolean;
+    backend: string;
+    bridgeUrl: string;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        setError(null);
+        const data = await fetchHealthInfo();
+        if (!cancelled) setHealthInfo(data);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load health");
+          setHealthInfo(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { healthInfo, loading, error };
+}
+
+export function useApprovals(refreshInterval = 3000) {
+  const [approvals, setApprovals] = useState<PendingApproval[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await fetchApprovals();
+      setApprovals(data);
+    } catch {
+      setApprovals([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (refreshInterval <= 0) return;
+    const id = setInterval(load, refreshInterval);
+    return () => clearInterval(id);
+  }, [load, refreshInterval]);
+
+  const resolve = useCallback(
+    async (sessionId: string, toolCallId: string, decision: "approve" | "deny") => {
+      await apiResolveApproval(sessionId, toolCallId, decision);
+      setApprovals((prev) =>
+        prev.filter((a) => !(a.sessionId === sessionId && a.toolCallId === toolCallId))
+      );
+    },
+    []
+  );
+
+  return { approvals, loading, resolve, refresh: load };
+}
+
+export function useRouting() {
+  const [rules, setRules] = useState<{ backend: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await fetchRoutingRules();
+      setRules(data);
+    } catch {
+      setRules([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const setBackend = useCallback(async (backend: string) => {
+    await setRoutingBackend(backend);
+  }, []);
+
+  return { rules, loading, setBackend, refresh: load };
 }

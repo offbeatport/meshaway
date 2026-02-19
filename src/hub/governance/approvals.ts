@@ -1,10 +1,32 @@
 /** Simple approval tracking for dangerous tools. */
-const pendingApprovals = new Map<string, { resolve: (decision: boolean) => void }>();
+const pendingApprovals = new Map<
+  string,
+  { resolve: (decision: boolean) => void; sessionId: string; toolCallId: string; command?: string; createdAt: number }
+>();
 
-export function requestApproval(sessionId: string, toolCallId: string): Promise<boolean> {
+export function listPendingApprovals(): Array<{ key: string; sessionId: string; toolCallId: string; command?: string }> {
+  return Array.from(pendingApprovals.entries()).map(([key, v]) => ({
+    key,
+    sessionId: v.sessionId,
+    toolCallId: v.toolCallId,
+    command: v.command,
+  }));
+}
+
+export function requestApproval(
+  sessionId: string,
+  toolCallId: string,
+  meta?: { command?: string }
+): Promise<boolean> {
   const key = `${sessionId}:${toolCallId}`;
   return new Promise((resolve) => {
-    pendingApprovals.set(key, { resolve });
+    pendingApprovals.set(key, {
+      resolve,
+      sessionId,
+      toolCallId,
+      command: meta?.command,
+      createdAt: Date.now(),
+    });
   });
 }
 

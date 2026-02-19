@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity,
@@ -9,6 +10,10 @@ import {
 } from "lucide-react";
 import { useSessions } from "@/lib/useApi";
 import { formatRelativeTime, truncateId } from "@/lib/format";
+import { SkeletonCard } from "@/components/SkeletonCard";
+import { CopyBridgeUrl } from "@/components/CopyBridgeUrl";
+
+type StatusFilter = "all" | "active" | "completed" | "killed";
 function StatusBadge({ status }: { status: string }) {
   const styles = {
     active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -69,15 +74,37 @@ function SessionCard({
 
 export function SessionsList() {
   const { sessions, loading, error, refresh } = useSessions(4000);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const filteredSessions = useMemo(() => {
+    if (statusFilter === "all") return sessions;
+    return sessions.filter((s) => s.status === statusFilter);
+  }, [sessions, statusFilter]);
+
+  const sortedSessions = useMemo(
+    () => [...filteredSessions].sort((a, b) => b.updatedAt - a.updatedAt),
+    [filteredSessions]
+  );
 
   if (loading && sessions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24">
-        <div className="w-12 h-12 rounded-xl bg-zinc-800/80 flex items-center justify-center animate-pulse-subtle">
-          <Activity className="h-6 w-6 text-zinc-500" />
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <Activity className="h-5 w-5 text-emerald-400/80" />
+              Sessions
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              Active and recent agent sessions
+            </p>
+          </div>
         </div>
-        <p className="mt-4 text-zinc-500 font-medium">Loading sessions…</p>
-        <p className="mt-1 text-sm text-zinc-600">Connecting to Hub</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -107,24 +134,38 @@ export function SessionsList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
           <h2 className="text-xl font-semibold flex items-center gap-2">
             <Activity className="h-5 w-5 text-emerald-400/80" />
             Sessions
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
-            Active and recent agent sessions
+            {sortedSessions.length} session{sortedSessions.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <button
-          onClick={refresh}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors"
-          title="Refresh"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            aria-label="Filter by status"
+          >
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="completed">Completed</option>
+            <option value="killed">Killed</option>
+          </select>
+          <button
+            onClick={refresh}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors"
+            title="Refresh"
+            aria-label="Refresh sessions"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {sessions.length === 0 ? (
@@ -136,17 +177,24 @@ export function SessionsList() {
             No sessions yet
           </h3>
           <p className="mt-2 text-zinc-500 max-w-sm mx-auto">
-            Connect a client to the Bridge to start. Point Copilot SDK{" "}
-            <code className="text-zinc-400">cliUrl</code> to{" "}
+            Connect Copilot SDK <code className="text-zinc-400">cliUrl</code> to{" "}
             <code className="text-emerald-400/80">http://127.0.0.1:4321</code>
           </p>
-          <p className="mt-4 text-xs text-zinc-600 font-mono">
-            Sessions will appear here when clients connect
-          </p>
+          <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <CopyBridgeUrl />
+            <a
+              href="https://github.com/meshaway/meshaway"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-zinc-500 hover:text-zinc-300"
+            >
+              View docs
+            </a>
+          </div>
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {sessions.map((s) => (
+          {sortedSessions.map((s) => (
             <SessionCard
               key={s.id}
               id={s.id}

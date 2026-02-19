@@ -7,12 +7,33 @@ import {
   Check,
   ChevronRight,
   Shield,
+  Wrench,
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import * as Collapsible from "@base-ui/react/collapsible";
 import * as Tabs from "@base-ui/react/tabs";
 import { useSession } from "@/lib/useApi";
 import { formatDateTime, formatTime } from "@/lib/format";
+import type { Frame } from "@/lib/api";
+
+function extractToolCalls(frames: Frame[]): Array<{ id: string; command?: string; status?: string; result?: unknown; timestamp: number }> {
+  const tools: Array<{ id: string; command?: string; status?: string; result?: unknown; timestamp: number }> = [];
+  for (const f of frames) {
+    if (f.type === "tool_call" || f.type === "tool_call_update" || (f.payload && typeof f.payload === "object" && "toolCallId" in (f.payload as object))) {
+      const p = f.payload as Record<string, unknown>;
+      const id = (p?.toolCallId ?? f.id) as string;
+      const existing = tools.find((t) => t.id === id);
+      const entry = existing ?? { id, timestamp: f.timestamp };
+      if (p?.name) entry.command = String(p.name);
+      if (p?.command) entry.command = String(p.command);
+      if (p?.status) entry.status = String(p.status);
+      if (p?.result !== undefined) entry.result = p.result;
+      if (!existing) tools.push(entry);
+      else Object.assign(existing, entry);
+    }
+  }
+  return tools.sort((a, b) => a.timestamp - b.timestamp);
+}
 
 function KillButton({
   onKill,
@@ -162,11 +183,26 @@ export function SessionDetail() {
 
   if (loading && !session) {
     return (
-      <div className="flex flex-col items-center justify-center py-24">
-        <div className="w-12 h-12 rounded-xl bg-zinc-800/80 flex items-center justify-center animate-pulse-subtle">
-          <FileJson className="h-6 w-6 text-zinc-500" />
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-6 h-8 w-32 rounded bg-zinc-800 animate-pulse" />
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 mb-6 animate-pulse">
+          <div className="h-5 w-2/3 rounded bg-zinc-700/50" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-zinc-700/40" />
         </div>
-        <p className="mt-4 text-zinc-500 font-medium">Loading session…</p>
+        <div className="space-y-2">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div
+              key={i}
+              className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 animate-pulse"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-4 w-4 rounded bg-zinc-700/50" />
+                <div className="h-4 flex-1 max-w-[120px] rounded bg-zinc-700/40" />
+                <div className="h-4 w-16 rounded bg-zinc-700/40" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -179,7 +215,7 @@ export function SessionDetail() {
             {error ?? "Session not found"}
           </p>
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/sessions")}
             className="mt-4 flex items-center gap-2 mx-auto px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -194,7 +230,7 @@ export function SessionDetail() {
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between gap-4 mb-6">
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/sessions")}
           className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 transition-colors font-medium text-sm"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -242,6 +278,13 @@ export function SessionDetail() {
             <FileJson className="h-4 w-4 inline mr-2" />
             Frames ({frames.length})
           </Tabs.Tab>
+          <Tabs.Tab
+            value="tools"
+            className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 data-[selected]:bg-zinc-800 data-[selected]:text-zinc-100 transition-colors"
+          >
+            <Wrench className="h-4 w-4 inline mr-2" />
+            Tool calls ({extractToolCalls(frames).length})
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="frames" className="space-y-2">
@@ -266,6 +309,49 @@ export function SessionDetail() {
               ))}
             </div>
           )}
+        </Tabs.Panel>
+
+        <Tabs.Panel value="tools" className="space-y-2">
+          {(() => {
+            const toolCalls = extractToolCalls(frames);
+            return toolCalls.length === 0 ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-12 text-center">
+                <Wrench className="h-12 w-12 text-zinc-600 mx-auto mb-3" />
+                <p className="text-zinc-500">No tool calls extracted</p>
+                <p className="mt-1 text-sm text-zinc-600">
+                  Tool calls will appear when the session invokes tools
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {toolCalls.map((t) => (
+                  <div
+                    key={t.id}
+                    className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <code className="text-sm font-mono text-emerald-400">
+                        {t.command ?? t.id}
+                      </code>
+                      {t.status && (
+                        <span className="text-xs text-zinc-500">{t.status}</span>
+                      )}
+                    </div>
+                    {t.result !== undefined && (
+                      <pre className="mt-2 font-mono text-xs text-zinc-400 overflow-x-auto whitespace-pre-wrap break-words">
+                        {typeof t.result === "string"
+                          ? t.result
+                          : JSON.stringify(t.result, null, 2)}
+                      </pre>
+                    )}
+                    <p className="mt-1 text-xs text-zinc-600">
+                      {formatTime(t.timestamp)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </Tabs.Panel>
       </Tabs.Root>
     </div>

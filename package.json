@@ -17,7 +17,12 @@
     "test:watch": "vitest",
     "build:native": "pnpm run build && tsx scripts/package-release.ts"
   },
-  "keywords": ["cli", "acp", "bridge", "meshaway"],
+  "keywords": [
+    "cli",
+    "acp",
+    "bridge",
+    "meshaway"
+  ],
   "license": "Apache-2.0",
   "dependencies": {
     "@base-ui/react": "^1.0.0-beta.6",

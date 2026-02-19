@@ -1,11 +1,18 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { Cpu, Activity, Wifi, WifiOff } from "lucide-react";
+import { Cpu, Activity, Wifi, WifiOff, ShieldCheck, Route, Stethoscope } from "lucide-react";
 import { useHealth } from "@/lib/useApi";
+
+const navItems = [
+  { to: "/", label: "Home" },
+  { to: "/sessions", label: "Sessions", icon: Activity },
+  { to: "/approvals", label: "Approvals", icon: ShieldCheck },
+  { to: "/routing", label: "Routing", icon: Route },
+  { to: "/system", label: "Health", icon: Stethoscope },
+];
 
 export function Layout() {
   const healthy = useHealth();
   const location = useLocation();
-  const isHome = location.pathname === "/";
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
@@ -28,21 +35,30 @@ export function Layout() {
             </div>
           </Link>
 
-          <nav className="flex items-center gap-4">
-            <Link
-              to="/"
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isHome
-                  ? "bg-zinc-800 text-zinc-100"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-              }`}
-            >
-              <Activity className="h-4 w-4" />
-              Sessions
-            </Link>
+          <nav className="flex items-center gap-1" role="navigation" aria-label="Main">
+            {navItems.map(({ to, label, icon: Icon }) => {
+              const isActive =
+                to === "/"
+                  ? location.pathname === "/"
+                  : location.pathname.startsWith(to);
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-zinc-800 text-zinc-100"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                  }`}
+                >
+                  {Icon && <Icon className="h-4 w-4" aria-hidden />}
+                  {label}
+                </Link>
+              );
+            })}
 
             <div
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ml-2 ${
                 healthy === true
                   ? "text-emerald-400/90"
                   : healthy === false
@@ -50,11 +66,12 @@ export function Layout() {
                     : "text-zinc-500"
               }`}
               title={healthy === true ? "Connected" : "Disconnected"}
+              aria-live="polite"
             >
               {healthy === true ? (
-                <Wifi className="h-4 w-4" />
+                <Wifi className="h-4 w-4" aria-hidden />
               ) : (
-                <WifiOff className="h-4 w-4" />
+                <WifiOff className="h-4 w-4" aria-hidden />
               )}
               <span className="text-xs font-mono">
                 {healthy === true ? "Live" : healthy === false ? "Offline" : "…"}
