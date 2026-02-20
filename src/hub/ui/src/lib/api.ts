@@ -135,7 +135,10 @@ export interface PlaygroundRunnerSendParams {
   clientType: "copilot" | "acp";
   transport: "tcp" | "stdio";
   bridgeTarget?: string;
-  backend: string;
+  /** Agent command (e.g. "meshaway"). */
+  agentCommand?: string;
+  /** Agent args (e.g. ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]). */
+  agentArgs?: string[];
   prompt: string;
   runnerSessionId?: string;
   record?: boolean;
@@ -173,7 +176,8 @@ export interface CreatePlaygroundSessionParams {
   clientType?: "copilot" | "acp";
   transport?: "tcp" | "stdio";
   bridgeTarget?: string;
-  backend?: string;
+  agentCommand?: string;
+  agentArgs?: string[];
 }
 
 export async function createPlaygroundSession(

@@ -16,6 +16,10 @@ export interface RunnerSession {
   updatedAt: number;
   /** Child process or runner handle for STDIO (for kill/reset). */
   runnerPid?: number;
+  /** Agent command for STDIO (e.g. "meshaway"). */
+  agentCommand?: string;
+  /** Agent args for STDIO (e.g. ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]). */
+  agentArgs?: string[];
 }
 
 class RunnerStore {
@@ -44,7 +48,7 @@ class RunnerStore {
 
   update(
     runnerSessionId: string,
-    updates: Partial<Pick<RunnerSession, "status" | "bridgeSessionId" | "bridgeTarget" | "runnerPid">>
+    updates: Partial<Pick<RunnerSession, "status" | "bridgeSessionId" | "bridgeTarget" | "runnerPid" | "agentCommand" | "agentArgs">>
   ): RunnerSession | undefined {
     const session = this.byId.get(runnerSessionId);
     if (!session) return undefined;

@@ -9,8 +9,7 @@ import {
   CheckCircle,
   AlertCircle,
   ExternalLink,
-  Skull,
-  Square,
+
   Layers,
   ShieldCheck,
   Zap,
@@ -26,7 +25,6 @@ import {
 import { useHealthInfo } from "@/lib/useApi";
 import {
   sendPlaygroundRunner,
-  setRoutingBackend,
   createPlaygroundSession,
   fetchPlaygroundFrames,
   playgroundControl,
@@ -38,13 +36,6 @@ import {
 type Dialect = "copilot" | "acp";
 type Transport = "tcp" | "stdio";
 
-const COMMON_BACKENDS = [
-  "acp:gemini-cli",
-  "acp:copilot",
-  "acp:claude",
-  "acp:opencode",
-];
-
 type PipelineId = "copilot-stdio-gemini" | "copilot-stdio-claude" | "copilot-stdio-opencode" | "acp-stdio-opencode";
 
 const PIPELINE_OPTIONS: {
@@ -55,12 +46,15 @@ const PIPELINE_OPTIONS: {
   part3: string;
   dialect: Dialect;
   transport: Transport;
-  backend: string;
+  /** Agent command (e.g. "meshaway"). User specifies CLI path locally. */
+  agentCommand: string;
+  /** Agent args to spawn bridge (e.g. ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]). */
+  agentArgs: string[];
 }[] = [
-    { value: "copilot-stdio-gemini", label: "Github Copilot SDK > stdio: Bridge > acp: Gemini", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Gemini", dialect: "copilot", transport: "stdio", backend: "acp:gemini-cli" },
-    { value: "copilot-stdio-claude", label: "Github Copilot SDK > stdio: Bridge > acp: Claude Code", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Claude Code", dialect: "copilot", transport: "stdio", backend: "acp:claude" },
-    { value: "copilot-stdio-opencode", label: "Github Copilot SDK > stdio: Bridge > acp: OpenCode", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: OpenCode", dialect: "copilot", transport: "stdio", backend: "acp:opencode" },
-    { value: "acp-stdio-opencode", label: "ACP Client SDK > stdio: Bridge > acp: OpenCode", part1: "ACP Client SDK", part2: "stdio: Bridge", part3: "acp: OpenCode", dialect: "acp", transport: "stdio", backend: "acp:opencode" },
+    { value: "copilot-stdio-gemini", label: "Github Copilot SDK > stdio: Bridge > acp: Gemini", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Gemini", dialect: "copilot", transport: "stdio", agentCommand: "meshaway", agentArgs: ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"] },
+    { value: "copilot-stdio-claude", label: "Github Copilot SDK > stdio: Bridge > acp: Claude Code", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Claude Code", dialect: "copilot", transport: "stdio", agentCommand: "meshaway", agentArgs: ["bridge", "--transport", "stdio", "--backend", "acp:claude"] },
+    { value: "copilot-stdio-opencode", label: "Github Copilot SDK > stdio: Bridge > acp: OpenCode", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: OpenCode", dialect: "copilot", transport: "stdio", agentCommand: "meshaway", agentArgs: ["bridge", "--transport", "stdio", "--backend", "acp:opencode"] },
+    { value: "acp-stdio-opencode", label: "ACP Client SDK > stdio: Bridge > acp: OpenCode", part1: "ACP Client SDK", part2: "stdio: Bridge", part3: "acp: OpenCode", dialect: "acp", transport: "stdio", agentCommand: "meshaway", agentArgs: ["bridge", "--transport", "stdio", "--backend", "acp:opencode"] },
   ];
 
 export function Playground() {
@@ -72,7 +66,6 @@ export function Playground() {
   const [sessionId, setSessionId] = useState("");
   const runnerSessionIdRef = useRef("");
   const [prompt, setPrompt] = useState("");
-  const [backendOverride, setBackendOverride] = useState("acp:gemini-cli");
   const [sending, setSending] = useState(false);
   const [lastResult, setLastResult] = useState<{
     runnerSessionId?: string;
@@ -104,9 +97,9 @@ export function Playground() {
   const [highlightedFrameId, setHighlightedFrameId] = useState<string | null>(null);
 
   const bridgeUrl = healthInfo?.bridgeUrl ?? "http://127.0.0.1:4321";
-  const currentBackend = healthInfo?.backend ?? "not configured";
   const activeRunnerSessionId = lastResult?.runnerSessionId ?? runnerSessionId;
   runnerSessionIdRef.current = activeRunnerSessionId;
+  const selectedOption = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
   const inferredToolCalls = frames
     .filter((f) => {
       const p = f.payload as Record<string, unknown> | undefined;
@@ -136,26 +129,7 @@ export function Playground() {
           ? (lastResult?.status as string) || "connected"
           : "idle";
   const runStatus = playgroundStatus === "connected" ? "running" : playgroundStatus;
-  const resolvedBackend = backendOverride.trim() || currentBackend || COMMON_BACKENDS[0];
-  const effectiveBridgeType = lastResult?.bridgeType ?? transport;
-  const effectiveBridgeTarget =
-    lastResult?.bridgeTarget ??
-    (transport === "tcp" ? bridgeTargetOverride.trim() || bridgeUrl : "stdio://local");
-  const effectiveAgentExec =
-    lastResult?.agentExec ??
-    (effectiveBridgeType === "stdio" ? "auto-resolved by hub runner" : "external bridge process");
-  const effectiveAgentArgs =
-    lastResult?.agentArgs && lastResult.agentArgs.length > 0
-      ? lastResult.agentArgs
-      : effectiveBridgeType === "stdio"
-        ? ["bridge", "--transport", "stdio", "--backend", resolvedBackend]
-        : [];
-  const bridgeSummary =
-    effectiveBridgeType === "tcp"
-      ? `tcp ${effectiveBridgeTarget.replace(/^https?:\/\//, "")}`
-      : "stdio";
-  const canControl = Boolean(activeRunnerSessionId) && runStatus !== "idle";
-  const configBridgeTarget = transport === "tcp" ? effectiveBridgeTarget : "stdio://local";
+
   const clientStatus = lastResult?.error ? "Error" : "Ready";
   const bridgeStatus = activeRunnerSessionId ? (lastResult?.error ? "Error" : "Connected") : "Disconnected";
   const backendStatus = activeRunnerSessionId ? (lastResult?.error ? "Error" : "Connected") : "Pending";
@@ -166,17 +140,20 @@ export function Playground() {
     setSelectedPipeline(value);
     setDialect(option.dialect);
     setTransport(option.transport);
-    setBackendOverride(option.backend);
   };
+  const agentArgsJson =
+    "[\n" +
+    selectedOption.agentArgs.map((a) => `    "${a}"`).join(",\n") +
+    ",\n  ]";
   const clientCode =
     dialect === "copilot"
       ? `const client = new CopilotClient({
   cliPath: "meshaway",
-  cliArgs: ["--headless", "--agent", "gemini"],
+  cliArgs: ${agentArgsJson},
 });`
       : `const client = new AcpClient({
   command: "meshaway",
-  args: ["bridge", "--transport", "stdio", "--backend", "${resolvedBackend}"],
+  args: ${agentArgsJson},
 });`;
 
 
@@ -191,14 +168,14 @@ export function Playground() {
   }, []);
 
   const handleConnect = useCallback(() => {
-    const backend = backendOverride.trim() || currentBackend || COMMON_BACKENDS[0];
     const bridgeTarget = bridgeTargetOverride.trim() || bridgeUrl;
-    setRoutingBackend(backend).catch(() => { });
+    const option = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
     createPlaygroundSession({
       clientType: dialect,
       transport,
       bridgeTarget: transport === "tcp" ? bridgeTarget : undefined,
-      backend,
+      agentCommand: option.agentCommand,
+      agentArgs: option.agentArgs,
     })
       .then(({ runnerSessionId: id, bridgeType, bridgeTarget, agentExec, agentArgs }) => {
         setRunnerSessionId(id);
@@ -212,12 +189,12 @@ export function Playground() {
         });
       })
       .catch(() => { });
-  }, [dialect, transport, backendOverride, bridgeTargetOverride, bridgeUrl, currentBackend]);
+  }, [dialect, transport, selectedPipeline, bridgeTargetOverride, bridgeUrl]);
 
   useEffect(() => {
     resetRunner();
     handleConnect();
-  }, [dialect, transport, bridgeTargetOverride, backendOverride, resetRunner, bridgeUrl, currentBackend]);
+  }, [dialect, transport, selectedPipeline, bridgeTargetOverride, resetRunner, bridgeUrl]);
 
   const loadFrames = useCallback(async () => {
     if (!activeRunnerSessionId) return;
@@ -240,14 +217,15 @@ export function Playground() {
     if (!prompt.trim()) return;
     setSending(true);
     setLastResult(null);
-    const backend = backendOverride.trim() || currentBackend || COMMON_BACKENDS[0];
     const bridgeTarget = bridgeTargetOverride.trim() || bridgeUrl;
+    const option = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
     try {
       const res = await sendPlaygroundRunner({
         clientType: dialect,
         transport,
         bridgeTarget: transport === "tcp" ? bridgeTarget : undefined,
-        backend,
+        agentCommand: option.agentCommand,
+        agentArgs: option.agentArgs,
         prompt: prompt.trim(),
         runnerSessionId: activeRunnerSessionId || undefined,
         faultLatency: faultLatency > 0 ? faultLatency : undefined,
@@ -275,35 +253,8 @@ export function Playground() {
     }
   };
 
-  const handleKill = async () => {
-    if (!activeRunnerSessionId) return;
-    setKilling(true);
-    try {
-      await playgroundControl(activeRunnerSessionId, "kill");
-      setLastResult((r) => ({ ...r, runnerSessionId: activeRunnerSessionId, error: "Session killed" }));
-    } catch (err) {
-      setLastResult({ error: err instanceof Error ? err.message : "Kill failed" });
-    } finally {
-      setKilling(false);
-    }
-  };
 
-  const handleCancel = async () => {
-    if (!activeRunnerSessionId) return;
-    setCancelling(true);
-    try {
-      await playgroundControl(activeRunnerSessionId, "cancel");
-      setLastResult((r) => ({ ...r, runnerSessionId: activeRunnerSessionId, raw: { result: "cancel sent" } }));
-    } catch (err) {
-      setLastResult({ error: err instanceof Error ? err.message : "Cancel failed" });
-    } finally {
-      setCancelling(false);
-    }
-  };
 
-  const handleReset = () => {
-    resetRunner();
-  };
 
   const handleReplay = async () => {
     let entries: Array<{ method: string; params?: unknown }>;
@@ -352,13 +303,13 @@ export function Playground() {
         </div>
       </div>
 
-      {/* Configuration + Client code */}
+      { }
       <section className="pt-5 border-t border-zinc-800">
         <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <div className="flex flex-col max-w-md">
             <div className="flex items-center justify-between mb-2">
               <label className="text-[13px] font-medium text-zinc-400 tracking-tight">
-                Configuration
+                Client Type
               </label>
               <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold">
                 Stdio Bridge
@@ -388,14 +339,7 @@ export function Playground() {
               <span className="text-zinc-500">Session ID:</span>
               <div className="flex min-w-0 items-center gap-2">
                 <code className="min-w-0 flex-1 truncate font-mono text-zinc-300">{activeRunnerSessionId || "—"}</code>
-                <button
-                  type="button"
-                  onClick={() => activeRunnerSessionId && navigator.clipboard?.writeText(activeRunnerSessionId)}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
-                  aria-label="Copy runner session id"
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </button>
+
               </div>
               <span className="text-zinc-500">Transport:</span>
               <span className="font-medium text-zinc-400">STDIO (Meshaway Bridge)</span>
@@ -434,111 +378,8 @@ export function Playground() {
       </section>
 
 
-      {/* Run control bar */}
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4 text-xs space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-zinc-500">Runner session</span>
-            <code className="font-mono text-zinc-200">{activeRunnerSessionId || "—"}</code>
-            <button
-              type="button"
-              onClick={() => {
-                if (!activeRunnerSessionId) return;
-                void navigator.clipboard?.writeText(activeRunnerSessionId);
-              }}
-              className="inline-flex h-5 w-5 items-center justify-center rounded text-[11px] text-sky-400 opacity-60 hover:opacity-100 hover:bg-zinc-800"
-              aria-label="Copy runner session id"
-            >
-              <Copy className="h-3 w-3" />
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-zinc-400">
-              Status: <span className="text-zinc-200">{runStatus}</span>
-            </span>
-            <span className="text-zinc-500">{frames.length} frames</span>
-          </div>
-        </div>
 
-        <div className="text-zinc-300 truncate">
-          Client: <code className="font-mono">{dialect}</code> · Bridge:{" "}
-          <code className="font-mono">{bridgeSummary}</code> · Backend:{" "}
-          <code className="font-mono">{resolvedBackend}</code>
-        </div>
 
-        <details className="rounded-lg border border-zinc-800 bg-zinc-900/40">
-          <summary className="cursor-pointer px-3 py-2 text-zinc-400 hover:text-zinc-300">
-            Details
-          </summary>
-          <div className="space-y-2 px-3 pb-3 text-zinc-300">
-            <div className="truncate">
-              Bridge session: <code className="font-mono">{sessionId || lastResult?.sessionId || "—"}</code>
-            </div>
-            <div className="truncate">
-              Agent exec: <code className="font-mono">{effectiveAgentExec}</code>
-            </div>
-            <div className="truncate">
-              CLI args: <code className="font-mono">{effectiveAgentArgs.length ? effectiveAgentArgs.join(" ") : "—"}</code>
-            </div>
-            {lastResult?.error && (
-              <div className="truncate text-red-300">
-                Last error: <code className="font-mono">{lastResult.error}</code>
-              </div>
-            )}
-            <details>
-              <summary className="cursor-pointer text-zinc-500 hover:text-zinc-400">
-                Config snapshot JSON
-              </summary>
-              <pre className="mt-1 max-h-48 overflow-auto rounded border border-zinc-800 bg-zinc-900/60 p-2 text-[11px] text-zinc-400">
-                {JSON.stringify(
-                  {
-                    dialect,
-                    transport,
-                    bridgeType: effectiveBridgeType,
-                    bridgeTarget: effectiveBridgeTarget,
-                    backend: resolvedBackend,
-                    runnerSessionId: activeRunnerSessionId || null,
-                    bridgeSessionId: sessionId || lastResult?.sessionId || null,
-                    agentExec: effectiveAgentExec,
-                    agentArgs: effectiveAgentArgs,
-                  },
-                  null,
-                  2
-                )}
-              </pre>
-            </details>
-          </div>
-        </details>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleReset}
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-800"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Start / Reset
-          </button>
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={cancelling || !canControl}
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-          >
-            {cancelling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleKill}
-            disabled={killing || !canControl}
-            className="ml-auto inline-flex items-center gap-1 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 text-[11px] hover:bg-red-500/30 disabled:opacity-50"
-          >
-            {killing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Skull className="h-3.5 w-3.5" />}
-            Kill
-          </button>
-        </div>
-      </section>
 
       {/* Message + Send + Response */}
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
@@ -900,6 +741,6 @@ export function Playground() {
           Or open <Link to="/sessions" className="text-sky-400/90 hover:text-sky-400">Sessions</Link> to see live activity.
         </p>
       </section>
-    </div>
+    </div >
   );
 }

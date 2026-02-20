@@ -120,9 +120,8 @@ export function createProgram(): Command {
   program
     .command("doctor")
     .description("Environment checks and fixes")
-    .option("--agent <name>", "Agent name")
     .option("--data-dir <path>", "Data directory", "~/.meshaway")
-    .action((opts: { agent?: string; dataDir?: string }) => runDoctor(opts));
+    .action((opts: { dataDir?: string }) => runDoctor(opts));
 
   program
     .command("status")

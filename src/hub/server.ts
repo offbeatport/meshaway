@@ -176,9 +176,10 @@ export function createHubApp(): Hono {
       clientType?: string;
       transport?: string;
       bridgeTarget?: string;
-      backend?: string;
       prompt?: string;
       runnerSessionId?: string;
+      agentCommand?: string;
+      agentArgs?: string[];
       record?: boolean;
       recordFilename?: string;
       sessionId?: string;
@@ -200,7 +201,6 @@ export function createHubApp(): Hono {
       : (typeof body.bridgeUrl === "string" && body.bridgeUrl)
         ? body.bridgeUrl.replace(/\/+$/, "")
         : defaultBridgeUrl;
-    const backend = typeof body.backend === "string" ? body.backend : undefined;
     const runnerSessionId = typeof body.runnerSessionId === "string" && body.runnerSessionId
       ? body.runnerSessionId
       : genId("runner");
@@ -208,19 +208,23 @@ export function createHubApp(): Hono {
     const runnerSession = runnerStore.createOrGet(runnerSessionId);
 
     if (transport === "stdio") {
+      const agentCommand = typeof body.agentCommand === "string" ? body.agentCommand : runnerSession.agentCommand ?? "meshaway";
+      const agentArgs = Array.isArray(body.agentArgs) && body.agentArgs.length > 0
+        ? body.agentArgs
+        : (runnerSession.agentArgs && runnerSession.agentArgs.length > 0 ? runnerSession.agentArgs : ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]);
       runnerStore.update(runnerSessionId, { status: "streaming" });
       const hubBase = process.env.MESH_HUB_URL ?? `http://127.0.0.1:${process.env.PORT ?? 7337}`;
       let bridgeCommand: { cmd: string; args: string[] } = { cmd: "node", args: [] };
       try {
-        const { spawnPlaygroundRunnerStdio, getBridgeCommand } = await import("./playground/runner-stdio.js");
-        const resolvedBackend = backend ?? "";
-        bridgeCommand = getBridgeCommand(resolvedBackend);
+        const { spawnPlaygroundRunnerStdio, resolveBridgeCommand } = await import("./playground/runner-stdio.js");
+        bridgeCommand = resolveBridgeCommand(agentCommand, agentArgs);
         const child = spawnPlaygroundRunnerStdio({
           runnerSessionId,
           hubUrl: hubBase,
-          backend: resolvedBackend,
           clientType,
           prompt,
+          agentCommand,
+          agentArgs,
           record: body.record === true,
           recordFilename: typeof body.recordFilename === "string" ? body.recordFilename : undefined,
         });
@@ -244,15 +248,6 @@ export function createHubApp(): Hono {
         agentExec: bridgeCommand.cmd,
         agentArgs: bridgeCommand.args,
       });
-    }
-
-    if (backend) {
-      try {
-        const { setDefaultBackend } = await import("./governance/policy.js");
-        setDefaultBackend(backend);
-      } catch {
-        // ignore
-      }
     }
 
     const faultHeaders: Record<string, string> = {};
@@ -343,7 +338,7 @@ export function createHubApp(): Hono {
   });
 
   app.post("/api/playground/session", async (c) => {
-    let body: { clientType?: string; transport?: string; bridgeTarget?: string; backend?: string };
+    let body: { clientType?: string; transport?: string; bridgeTarget?: string; agentCommand?: string; agentArgs?: string[] };
     try {
       body = (await c.req.json().catch(() => ({}))) as typeof body;
     } catch {
@@ -356,23 +351,19 @@ export function createHubApp(): Hono {
         ? body.bridgeTarget.replace(/\/+$/, "")
         : defaultBridgeUrl;
     runnerStore.createOrGet(runnerSessionId);
-    const backend = typeof body.backend === "string" ? body.backend : undefined;
-    if (backend) {
-      try {
-        const { setDefaultBackend } = await import("./governance/policy.js");
-        setDefaultBackend(backend);
-      } catch {
-        // ignore
-      }
+    const agentCommand = typeof body.agentCommand === "string" ? body.agentCommand : "meshaway";
+    const agentArgs = Array.isArray(body.agentArgs) ? body.agentArgs : [];
+    if (transport === "stdio") {
+      runnerStore.update(runnerSessionId, { agentCommand, agentArgs });
     }
     let agentExec: string | null = null;
-    let agentArgs: string[] = [];
+    let resolvedAgentArgs: string[] = [];
     if (transport === "stdio") {
       try {
-        const { getBridgeCommand } = await import("./playground/runner-stdio.js");
-        const bridgeCommand = getBridgeCommand(backend ?? "");
+        const { resolveBridgeCommand } = await import("./playground/runner-stdio.js");
+        const bridgeCommand = resolveBridgeCommand(agentCommand, agentArgs.length ? agentArgs : ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]);
         agentExec = bridgeCommand.cmd;
-        agentArgs = bridgeCommand.args;
+        resolvedAgentArgs = bridgeCommand.args;
       } catch {
         // Metadata-only; keep session creation successful.
       }
@@ -382,7 +373,7 @@ export function createHubApp(): Hono {
       bridgeType: transport,
       bridgeTarget: transport === "tcp" ? bridgeTarget : "stdio://local",
       agentExec,
-      agentArgs,
+      agentArgs: resolvedAgentArgs,
     });
   });
 

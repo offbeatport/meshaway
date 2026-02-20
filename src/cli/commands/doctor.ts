@@ -3,7 +3,7 @@ import { getEnv } from "../../shared/env.js";
 import { OLLAMA_DEFAULT_URL } from "../../shared/constants.js";
 
 export async function runDoctor(
-  _opts: { agent?: string; dataDir?: string }
+  _opts: { dataDir?: string }
 ): Promise<void> {
   process.stderr.write("Meshaway doctor\n");
   process.stderr.write("───────────────────────────────────────────────────────────────\n\n");
