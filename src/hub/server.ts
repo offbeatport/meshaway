@@ -8,7 +8,7 @@ import { getLogger } from "../shared/logging.js";
 import { genId } from "../shared/ids.js";
 import { sessionStore } from "./store/memory.js";
 import { runnerStore } from "./store/runner.js";
-import { getDefaultBackend } from "./governance/policy.js";
+import { getDefaultAgent } from "./governance/policy.js";
 import { markKilled } from "../bridge/interceptors/killswitch.js";
 import { EMBEDDED_UI } from "./embedded-ui.generated.js";
 import type { CopilotSession } from "@github/copilot-sdk";
@@ -69,10 +69,10 @@ export function createHubApp(): Hono {
 
   app.get("/health", (c) => c.json({ ok: true }));
   app.get("/api/health", async (c) => {
-    const backend = getDefaultBackend();
+    const agent = getDefaultAgent();
     return c.json({
       hub: true,
-      backend: backend ?? "not configured",
+      agent: agent ?? "not configured",
     });
   });
   app.get("/api/sessions", (c) => c.json(sessionStore.listSessions()));
@@ -182,14 +182,16 @@ export function createHubApp(): Hono {
     const runnerSessionId = c.req.param("runnerSessionId");
     const runnerSession = runnerStore.get(runnerSessionId);
     if (!runnerSession) return c.json({ frames: [] });
-    if (runnerSession.bridgeSessionId) {
-      const frames = sessionStore.getFrames(runnerSession.bridgeSessionId);
-      return c.json({ frames });
-    }
-    return c.json({ frames: runnerSession.frames });
+    // Always include runner's own frames (e.g. session.connecting, session.error); merge with session store when bridge reports one
+    const runnerFrames = runnerSession.frames;
+    const frames =
+      runnerSession.bridgeSessionId != null
+        ? [...runnerFrames, ...sessionStore.getFrames(runnerSession.bridgeSessionId)]
+        : runnerFrames;
+    return c.json({ frames });
   });
 
-  const defaultCliArgs = ["bridge", "--agent", "acp:gemini-cli"];
+  const defaultCliArgs = ["bridge", "--agent", "gemini-cli"];
 
   app.post("/api/playground/session", async (c) => {
 
@@ -212,6 +214,7 @@ export function createHubApp(): Hono {
     };
 
     try {
+      addFrame("session.connecting", { cliPath, cliArgs });
       const { session, stop } = await createCopilotRunner({
         runnerSessionId,
         addFrame,
@@ -227,10 +230,19 @@ export function createHubApp(): Hono {
       });
     } catch (err) {
       console.error("Error creating Copilot runner", err);
-      const message = err instanceof Error ? err.message : "Failed to start agent";
+      const rawMessage = err instanceof Error ? err.message : "Failed to start agent";
+      const errWithSource = err as Error & { errorSource?: "agent" | "bridge" };
+      const agentPrefix = "Agent: ";
+      const isAgentError =
+        errWithSource.errorSource === "agent" ||
+        (errWithSource.errorSource !== "bridge" && rawMessage.startsWith(agentPrefix));
+      const message = isAgentError && rawMessage.startsWith(agentPrefix)
+        ? rawMessage.slice(agentPrefix.length)
+        : rawMessage;
+      const errorSource = isAgentError ? "agent" : "bridge";
       runnerStore.update(runnerSessionId, { status: "error" });
-      runnerStore.addFrame(runnerSessionId, "session.error", { message });
-      return c.json({ error: message, runnerSessionId }, 502);
+      runnerStore.addFrame(runnerSessionId, "session.error", { message, errorSource });
+      return c.json({ error: message, runnerSessionId, errorSource }, 502);
     }
   });
 

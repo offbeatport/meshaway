@@ -278,16 +278,16 @@ export function SessionDetail() {
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <code className="font-mono text-sm text-zinc-200 dark:text-zinc-200">{truncateId(session.id, 24)}</code>
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">{client}</span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-500">Backend: —</span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-500">Agent: —</span>
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">{formatDuration(duration) || "—"}</span>
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">{tokens} chars</span>
               </div>
               <span
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium shrink-0 ${session.status === "active"
-                    ? "bg-sky-500/15 text-sky-400 border border-sky-500/30"
-                    : session.status === "killed"
-                      ? "bg-red-500/15 text-red-400 border border-red-500/30"
-                      : "bg-zinc-500/15 text-zinc-400 border border-zinc-500/30"
+                  ? "bg-sky-500/15 text-sky-400 border border-sky-500/30"
+                  : session.status === "killed"
+                    ? "bg-red-500/15 text-red-400 border border-red-500/30"
+                    : "bg-zinc-500/15 text-zinc-400 border border-zinc-500/30"
                   }`}
               >
                 {session.status === "active" && <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />}
@@ -303,8 +303,8 @@ export function SessionDetail() {
                     type="button"
                     onClick={() => setTimelineFilter(value)}
                     className={`px-2.5 py-1 rounded-md text-xs font-medium ${timelineFilter === value
-                        ? "bg-zinc-700 dark:bg-zinc-700 text-zinc-100 dark:text-zinc-100"
-                        : "bg-zinc-800/50 dark:bg-zinc-800/50 text-zinc-400 dark:text-zinc-400 hover:text-zinc-200 dark:hover:text-zinc-200"
+                      ? "bg-zinc-700 dark:bg-zinc-700 text-zinc-100 dark:text-zinc-100"
+                      : "bg-zinc-800/50 dark:bg-zinc-800/50 text-zinc-400 dark:text-zinc-400 hover:text-zinc-200 dark:hover:text-zinc-200"
                       }`}
                   >
                     {value === "all" ? "All" : value.charAt(0).toUpperCase() + value.slice(1)}

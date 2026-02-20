@@ -63,14 +63,14 @@ export function createProgram(): Command {
       const help = [
         chalk.bold("Meshaway") + ` v${version}\n`,
         "Bridge and Hub for agentic tools. Connects SDKs (e.g. GitHub Copilot SDK)",
-        "to ACP provider backends (e.g. gemeni-cli, opencode etc.).\n",
+        "to ACP provider agents (e.g. gemeni-cli, opencode etc.).\n",
         "Usage:",
         "  meshaway hub       Start Hub (monitor sessions, playground)",
         "  meshaway bridge    Start Bridge in stdio mode",
         "  meshaway doctor    Run environment checks",
         "Examples:",
         "  meshaway hub --listen 127.0.0.1:7337   # Hub on custom port",
-        "  meshaway bridge --agent acp:gemini-cli # Bridge for Copilot/ACP\n",
+        "  meshaway bridge --agent gemini-cli # Bridge for Copilot/ACP\n",
         "  meshaway --help for options.  meshaway <command> --help for command help.",
       ].join("\n");
       getLogger().info(help);
@@ -125,7 +125,7 @@ export function createProgram(): Command {
     .description("Start Bridge (stdio)")
     .allowUnknownOption(true)
     .allowExcessArguments(true)
-    .option("--agent <specifier>", "Agent/backend specifier (e.g. acp:gemini-cli)")
+    .option("--agent <specifier>", "Agent command specifier (e.g. gemini-cli)")
     .option("--agent-args <args...>", "Extra arguments for the agent")
     .option("--log-level <level>", "Log level", "info")
     .option("--log-format <format>", "Log format", "text")
@@ -135,7 +135,7 @@ export function createProgram(): Command {
           (opts.logLevel as LogLevel || "info"),
           (opts.logFormat as LogFormat || "text")
         );
-        runStdioBridge(opts.agent as string, opts.agentArgs as string[]);
+        await runStdioBridge(opts.agent as string, opts.agentArgs as string[]);
       } catch (err) {
         getLogger().error(String(err));
         exit(EXIT.SERVER_FAILURE);
@@ -152,16 +152,16 @@ export function createProgram(): Command {
       log.info("Meshaway doctor");
       log.info("───────────────────────────────────────────────────────────────");
 
-      const backend = getEnv("BACKEND");
-      if (backend) {
-        log.info(`Backend (MESH_BACKEND): ${backend}`);
+      const agent = getEnv("AGENT");
+      if (agent) {
+        log.info(`Agent (MESH_AGENT): ${agent}`);
       } else {
-        log.info("Backend: not set (MESH_BACKEND)");
+        log.info("Agent: not set (MESH_AGENT)");
       }
 
       log.info("Fix:");
-      log.info("  - ACP backend:  meshaway bridge --agent acp:gemini-cli");
-      log.info("  - Or set:      MESH_BACKEND=...");
+      log.info("  - ACP agent:  meshaway bridge --agent gemini-cli");
+      log.info("  - Or set:      MESH_AGENT=...");
       log.info("───────────────────────────────────────────────────────────────");
 
     });

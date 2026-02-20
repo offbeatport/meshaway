@@ -88,7 +88,7 @@ export function SessionsList() {
     if (statusFilter !== "all") list = list.filter((s) => s.status === statusFilter);
     if (agentFilter !== "all") {
       list = list.filter((s) => {
-        const agent = (s as Session & { backend?: string }).backend;
+        const agent = (s as Session & { agent?: string }).agent;
         return agent === agentFilter;
       });
     }
@@ -129,7 +129,7 @@ export function SessionsList() {
   const agents = useMemo(() => {
     const set = new Set<string>();
     sessions.forEach((s) => {
-      const a = (s as Session & { backend?: string }).backend;
+      const a = (s as Session & { agent?: string }).agent;
       if (a) set.add(a);
     });
     return Array.from(set);
@@ -427,7 +427,7 @@ export function SessionsList() {
                       {sessionTokens(s) || "—"}
                     </td>
                     <td className="py-3 px-4 text-zinc-500 text-xs">
-                      {(s as Session & { backend?: string }).backend ?? "—"}
+                      {(s as Session & { agent?: string }).agent ?? "—"}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">

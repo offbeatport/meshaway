@@ -1,7 +1,7 @@
 import { createAcpStdioAdapter, type AcpStdioAdapter } from "../adapters/acp/stdio.js";
-import { parseBackendSpec } from "./router.js";
 import { genId } from "../shared/ids.js";
 import { getLogger } from "../shared/logging.js";
+import { AgentStartError } from "../shared/errors.js";
 import { parseEnvelope, isRequest } from "../protocols/jsonrpc/validate.js";
 import {
   AcpInitializeParamsSchema,
@@ -15,7 +15,7 @@ import { sessionStore } from "../hub/store/memory.js";
 import { createHubLinkClient, type HubLinkClient } from "./hublink/client.js";
 import { isKilled } from "./interceptors/killswitch.js";
 import { redactPayload } from "./interceptors/redaction.js";
-import { type } from "arktype";
+import { type, type ArkErrors } from "arktype";
 
 type JsonRpcId = string | number;
 
@@ -29,21 +29,15 @@ export interface BridgeEngineOptions {
   hubUrl?: string;
 }
 
-function parseCommand(commandLine: string): { command: string; args: string[] } {
-  const parts = commandLine.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) {
-    throw new Error("ACP backend command is empty");
-  }
-  return { command: parts[0], args: parts.slice(1) };
-}
 
-function assertSchema<T>(schema: (value: unknown) => T, params: unknown, context: string): T {
+/** Asserts params match the schema and returns the validated value. Throws if validation fails. */
+function assertSchema<T>(schema: (value: unknown) => T, params: unknown, context: string): Exclude<T, ArkErrors> {
   const out = schema(params);
   if (out instanceof type.errors) {
     const err = out as unknown as { summary: string };
     throw new Error(`Invalid ${context}: ${err.summary}`);
   }
-  return out as T;
+  return out as Exclude<T, ArkErrors>;
 }
 
 class AcpRpcClient {
@@ -54,20 +48,8 @@ class AcpRpcClient {
     { resolve: (value: unknown) => void; reject: (err: Error) => void; timer: NodeJS.Timeout }
   >();
 
-  constructor(commandSpec: string, extraArgs: string[] = []) {
-    let { command, args } = parseCommand(commandSpec);
-    if (
-      command &&
-      command !== "npx" &&
-      !command.includes("/") &&
-      !command.includes("\\") &&
-      args.length === 0
-    ) {
-      command = "npx";
-      args = [commandSpec.trim()];
-    }
-    args = [...args, ...extraArgs];
-    this.adapter = createAcpStdioAdapter(command, args);
+  constructor(cmd: string, args: string[] = []) {
+    this.adapter = createAcpStdioAdapter(cmd, args);
     this.adapter.onLine((line) => this.onLine(line));
   }
 
@@ -89,7 +71,7 @@ class AcpRpcClient {
     this.pending.delete(id);
     if (rec.error && typeof rec.error === "object") {
       const err = rec.error as Record<string, unknown>;
-      pending.reject(new Error(String(err.message ?? "ACP backend error")));
+      pending.reject(new Error(String(err.message ?? "ACP agent error")));
       return;
     }
     pending.resolve(rec.result);
@@ -125,31 +107,36 @@ class AcpRpcClient {
 }
 
 export class BridgeEngine {
-  private readonly backendSpec: ReturnType<typeof parseBackendSpec>;
   private readonly logger = getLogger();
-  private readonly localToBackendSession = new Map<string, string>();
+  private readonly localToAgentSession = new Map<string, string>();
   private acpClient: AcpRpcClient | null = null;
   private acpInitialized = false;
   private hubLink: HubLinkClient | null = null;
 
-  constructor(private readonly options: BridgeEngineOptions) {
-    this.backendSpec = this.options.agent
-      ? parseBackendSpec(this.options.agent)
-      : null;
-    if (this.backendSpec?.type === "acp") {
-      let value = this.backendSpec.value.trim();
-      if (value === "gemini-cli") value = "@google/gemini-cli";
-      const isPath = value.startsWith("/") || value.startsWith(".") || value.includes("\\");
-      const commandSpec = value && !value.includes(" ") && !isPath ? `npx ${value}` : value;
-      this.acpClient = new AcpRpcClient(commandSpec, this.options.agentArgs ?? []);
+  constructor(private readonly opts: BridgeEngineOptions) {
+
+    if (!opts.agent) {
+      throw new Error("Agent command is required to start the bridge. Please set the --agent option.");
     }
-    if (typeof this.options.hubUrl === "string" && this.options.hubUrl) {
-      this.hubLink = createHubLinkClient(this.options.hubUrl);
+
+    this.acpClient = new AcpRpcClient(opts.agent, opts.agentArgs ?? []);
+    if (typeof opts.hubUrl === "string" && opts.hubUrl) {
+      this.hubLink = createHubLinkClient(opts.hubUrl);
     }
   }
 
   close(): void {
     this.acpClient?.close();
+  }
+
+  async startAgent(): Promise<void> {
+    if (!this.acpClient) return;
+    try {
+      await this.ensureAcpInitialized();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Agent failed to start";
+      throw new AgentStartError(message);
+    }
   }
 
   private async ensureAcpInitialized(): Promise<void> {
@@ -162,8 +149,8 @@ export class BridgeEngine {
     this.acpInitialized = true;
   }
 
-  private resolveBackendSessionId(localSessionId: string): string {
-    return this.localToBackendSession.get(localSessionId) ?? localSessionId;
+  private resolveAgentSessionId(localSessionId: string): string {
+    return this.localToAgentSession.get(localSessionId) ?? localSessionId;
   }
 
   private ensureHubSession(localSessionId: string): void {
@@ -195,22 +182,22 @@ export class BridgeEngine {
 
     this.addFrameAndReport(localSessionId, "copilot.prompt", redactPayload(parsed), true);
 
-    if (this.backendSpec?.type === "acp" && this.acpClient) {
+    if (this.acpClient) {
       await this.ensureAcpInitialized();
-      if (!this.localToBackendSession.has(localSessionId)) {
+      if (!this.localToAgentSession.has(localSessionId)) {
         const newSessionResult = (await this.acpClient.request("session/new", {
           cwd: process.cwd(),
           mcpServers: [],
         })) as Record<string, unknown> | undefined;
-        const backendSessionId =
+        const agentSessionId =
           typeof newSessionResult?.sessionId === "string"
             ? newSessionResult.sessionId
             : localSessionId;
-        this.localToBackendSession.set(localSessionId, backendSessionId);
+        this.localToAgentSession.set(localSessionId, agentSessionId);
       }
-      const backendSessionId = this.resolveBackendSessionId(localSessionId);
+      const agentSessionId = this.resolveAgentSessionId(localSessionId);
       const result = await this.acpClient.request("session/prompt", {
-        sessionId: backendSessionId,
+        sessionId: agentSessionId,
         prompt: [{ type: "text", text: promptText }],
       });
       this.addFrameAndReport(localSessionId, "acp.session/prompt.result", redactPayload(result), true);
@@ -227,7 +214,7 @@ export class BridgeEngine {
     return {
       jsonrpc: "2.0",
       id,
-      error: { code: -32001, message: "No backend configured" },
+      error: { code: -32001, message: "No agent configured" },
     };
   }
 
@@ -236,7 +223,7 @@ export class BridgeEngine {
       return {
         jsonrpc: "2.0",
         id,
-        error: { code: -32001, message: "ACP backend not configured" },
+        error: { code: -32001, message: "ACP agent not configured" },
       };
     }
     await this.ensureAcpInitialized();
@@ -250,11 +237,11 @@ export class BridgeEngine {
     if (method === "session/new") {
       const valid = assertSchema(AcpNewSessionParamsSchema, params, "acp session/new params");
       const result = (await this.acpClient.request("session/new", valid)) as Record<string, unknown>;
-      const backendSessionId =
+      const agentSessionId =
         typeof result?.sessionId === "string" ? result.sessionId : genId("sess");
-      this.localToBackendSession.set(backendSessionId, backendSessionId);
-      this.ensureHubSession(backendSessionId);
-      this.addFrameAndReport(backendSessionId, "acp.session/new", redactPayload(valid), true);
+      this.localToAgentSession.set(agentSessionId, agentSessionId);
+      this.ensureHubSession(agentSessionId);
+      this.addFrameAndReport(agentSessionId, "acp.session/new", redactPayload(valid), true);
       return { jsonrpc: "2.0", id, result };
     }
 
@@ -265,8 +252,8 @@ export class BridgeEngine {
         return { jsonrpc: "2.0", id, error: { code: -32000, message: "Session killed" } };
       }
       this.ensureHubSession(localSessionId);
-      const backendSessionId = this.resolveBackendSessionId(localSessionId);
-      const payload = { ...valid, sessionId: backendSessionId };
+      const agentSessionId = this.resolveAgentSessionId(localSessionId);
+      const payload = { ...valid, sessionId: agentSessionId };
       const result = await this.acpClient.request("session/prompt", payload);
       this.addFrameAndReport(localSessionId, "acp.session/prompt", redactPayload(payload), true);
       this.addFrameAndReport(localSessionId, "acp.session/prompt.result", redactPayload(result), true);
@@ -275,10 +262,10 @@ export class BridgeEngine {
 
     if (method === "session/cancel") {
       const valid = assertSchema(AcpSessionCancelParamsSchema, params, "acp session/cancel params");
-      const backendSessionId = this.resolveBackendSessionId(valid.sessionId);
+      const agentSessionId = this.resolveAgentSessionId(valid.sessionId);
       const result = await this.acpClient.request("session/cancel", {
         ...valid,
-        sessionId: backendSessionId,
+        sessionId: agentSessionId,
       });
       sessionStore.updateSession(valid.sessionId, { status: "completed" });
       this.addFrameAndReport(valid.sessionId, "acp.session/cancel", redactPayload(valid), true);
@@ -354,7 +341,7 @@ export class BridgeEngine {
           try {
             await this.ensureAcpInitialized();
           } catch (err) {
-            this.logger.warn({ err }, "ACP backend initialize failed");
+            this.logger.warn({ err }, "ACP agent initialize failed");
           }
         }
         return {

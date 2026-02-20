@@ -55,7 +55,7 @@ export async function checkHealth(): Promise<boolean> {
 
 export interface HealthInfo {
   hub: boolean;
-  backend: string;
+  agent: string;
 }
 
 export async function fetchHealthInfo(): Promise<HealthInfo> {
@@ -72,7 +72,7 @@ export interface PlaygroundSendParams {
 export interface PlaygroundSendResult {
   jsonrpc: string;
   id: number;
-  result?: { sessionId?: string; [key: string]: unknown };
+  result?: { sessionId?: string;[key: string]: unknown };
   error?: { code: number; message: string; data?: unknown };
 }
 
@@ -80,7 +80,7 @@ export interface PlaygroundSendResult {
 export interface PlaygroundRunnerSendParams {
   /** Agent command (e.g. "meshaway"). */
   agentCommand?: string;
-  /** Agent args (e.g. ["bridge", "--agent", "acp:gemini-cli"]). */
+  /** Agent args (e.g. ["bridge", "--agent", "gemini-cli"]). */
   agentArgs?: string[];
   prompt: string;
   runnerSessionId?: string;
@@ -138,10 +138,12 @@ export async function createPlaygroundSession(
     agentExec?: string | null;
     agentArgs?: string[];
     error?: string;
+    errorSource?: "bridge" | "agent";
   };
   if (!res.ok) {
-    const err = new Error(data?.error ?? `Create session failed: ${res.status}`) as Error & { runnerSessionId?: string };
+    const err = new Error(data?.error ?? `Create session failed: ${res.status}`) as Error & { runnerSessionId?: string; errorSource?: "bridge" | "agent" };
     err.runnerSessionId = data?.runnerSessionId;
+    err.errorSource = data?.errorSource;
     throw err;
   }
   if (!data.runnerSessionId) throw new Error("No runnerSessionId in response");

@@ -4,6 +4,8 @@
  */
 
 import { BridgeEngine } from "./engine.js";
+import { AgentStartError } from "../shared/errors.js";
+import { EXIT } from "../shared/errors.js";
 
 const HEADER_END = "\r\n\r\n";
 
@@ -19,8 +21,17 @@ function readContentLengthHeader(header: string): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
-export function runStdioBridge(agent?: string, agentArgs?: string[]): void {
+export async function runStdioBridge(agent?: string, agentArgs?: string[]): Promise<void> {
   const engine = new BridgeEngine({ agent, agentArgs });
+  if (agent) {
+    try {
+      await engine.startAgent();
+    } catch (err) {
+      const message = err instanceof AgentStartError ? err.message : (err instanceof Error ? err.message : "Agent failed to start");
+      process.stderr.write(`Agent: ${message}\n`);
+      process.exit(EXIT.AGENT_FAILURE);
+    }
+  }
   let stdinClosed = false;
   let buffer = Buffer.alloc(0);
   let expectingBody = false;

@@ -95,12 +95,12 @@ const PIPELINE_OPTIONS: {
   part3: string;
   /** Agent command (e.g. "meshaway"). User specifies CLI path locally. */
   agentCommand: string;
-  /** Agent args to spawn bridge (e.g. ["bridge", "--agent", "acp:gemini-cli"]). */
+  /** Agent args to spawn bridge (e.g. ["bridge", "--agent", "gemini-cli"]). */
   agentArgs: string[];
 }[] = [
-    { value: "copilot-stdio-gemini", label: "Github Copilot SDK > stdio: Bridge > acp: Gemini", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Gemini", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "acp:gemini-cli"] },
-    { value: "copilot-stdio-claude", label: "Github Copilot SDK > stdio: Bridge > acp: Claude Code", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Claude Code", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "acp:claude"] },
-    { value: "copilot-stdio-opencode", label: "Github Copilot SDK > stdio: Bridge > acp: OpenCode", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: OpenCode", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "acp:opencode"] },
+    { value: "copilot-stdio-gemini", label: "Github Copilot SDK > stdio: Bridge >  Gemini", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: " Gemini", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "gemini-cli"] },
+    { value: "copilot-stdio-claude", label: "Github Copilot SDK > stdio: Bridge >  Claude Code", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: " Claude Code", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "claude"] },
+    { value: "copilot-stdio-opencode", label: "Github Copilot SDK > stdio: Bridge >  OpenCode", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: " OpenCode", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "opencode"] },
   ];
 
 export function Playground() {
@@ -124,24 +124,41 @@ export function Playground() {
   const [framesOpen, setFramesOpen] = useState(true);
   const [frameSearch, setFrameSearch] = useState("");
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [sessionErrorSource, setSessionErrorSource] = useState<"bridge" | "agent" | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const activeRunnerSessionId = lastResult?.runnerSessionId ?? runnerSessionId;
   runnerSessionIdRef.current = activeRunnerSessionId;
   const selectedOption = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
   const lastSessionErrorFrame = [...frames].reverse().find((f) => f.type === "session.error");
-  const sessionErrorFromFrame =
-    lastSessionErrorFrame && lastSessionErrorFrame.payload && typeof lastSessionErrorFrame.payload === "object" && "message" in lastSessionErrorFrame.payload
-      ? String((lastSessionErrorFrame.payload as { message: unknown }).message)
+  const sessionErrorPayload =
+    lastSessionErrorFrame?.payload && typeof lastSessionErrorFrame.payload === "object"
+      ? (lastSessionErrorFrame.payload as { message?: unknown; errorSource?: "bridge" | "agent" })
       : null;
-  const displaySessionError = sessionError ?? sessionErrorFromFrame;
+  const sessionErrorFromFrame =
+    sessionErrorPayload?.message != null && sessionErrorPayload?.message !== ""
+      ? String(sessionErrorPayload.message)
+      : lastSessionErrorFrame
+        ? "Session error"
+        : null;
+  const hasSessionError = sessionError != null || lastSessionErrorFrame != null;
+  const displaySessionError =
+    (sessionError != null && sessionError !== "" ? sessionError : null) ??
+    sessionErrorFromFrame ??
+    (hasSessionError ? "Session error" : null);
+  const displaySessionErrorSource =
+    sessionError != null ? sessionErrorSource : sessionErrorPayload?.errorSource ?? null;
   const hasSessionCreated = frames.some((f) => f.type === "copilot.session.created");
-  const connectionStatus: "Connected" | "Disconnected" | "Failed to connect" | "Connecting..." = !activeRunnerSessionId
-    ? "Disconnected"
-    : hasSessionCreated
-      ? "Connected"
-      : displaySessionError
-        ? "Failed to connect"
-        : "Connecting...";
+  const connectionStatus: "Connected" | "Disconnected" | "Failed to connect" | "Connecting..." =
+    isConnecting
+      ? "Connecting..."
+      : !activeRunnerSessionId
+        ? "Disconnected"
+        : hasSessionCreated
+          ? "Connected"
+          : hasSessionError
+            ? "Failed to connect"
+            : "Connecting...";
 
   const handlePipelineChange = (value: PipelineId) => {
     const option = PIPELINE_OPTIONS.find((p) => p.value === value);
@@ -174,6 +191,8 @@ export function Playground() {
 
   const handleConnect = useCallback(() => {
     setSessionError(null);
+    setSessionErrorSource(null);
+    setIsConnecting(true);
     const option = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
     createPlaygroundSession({
       cliPath: option.agentCommand,
@@ -188,14 +207,22 @@ export function Playground() {
           agentExec,
           agentArgs,
         });
+        // Fetch frames immediately so session.connecting and other early frames show right away
+        fetchPlaygroundFrames(id).then(setFrames).catch(() => setFrames([]));
       })
       .catch((err: unknown) => {
+        const errWithSource = err as Error & { runnerSessionId?: string; errorSource?: "bridge" | "agent" };
         setSessionError(err instanceof Error ? err.message : "Connection failed");
-        const runnerId = (err as Error & { runnerSessionId?: string }).runnerSessionId;
+        setSessionErrorSource(errWithSource.errorSource ?? null);
+        const runnerId = errWithSource.runnerSessionId;
         if (runnerId) {
           setRunnerSessionId(runnerId);
           setLastResult((prev) => (prev ? { ...prev, runnerSessionId: runnerId } : { runnerSessionId: runnerId }));
+          fetchPlaygroundFrames(runnerId).then(setFrames).catch(() => setFrames([]));
         }
+      })
+      .finally(() => {
+        setIsConnecting(false);
       });
   }, [selectedPipeline]);
 
@@ -281,24 +308,37 @@ export function Playground() {
               onValueChange={handlePipelineChange}
               items={PIPELINE_OPTIONS.map((p) => ({
                 value: p.value,
-                label: `${p.part1} → stdio → ${p.part3}`,
-                mutedSegment: p.part3.startsWith("acp: ") ? " → stdio → acp: " : undefined,
+                label: `${p.part1} → Meshaway bridge → ${p.part3}`,
+                mutedSegment: p.part3.startsWith(" ") ? " → Meshaway bridge →  " : undefined,
               }))}
               placeholder="Select a pipeline configuration..."
             />
 
             <div className="mt-3 grid grid-cols-[auto_1fr] items-center gap-x-8 gap-y-2 text-[11px]">
               <span className="text-zinc-500">Status:</span>
-              <span className="font-medium text-zinc-400 flex items-center gap-1.5" title={connectionStatus}>
-                <span
-                  className={`inline-block h-2 w-2 rounded-full shrink-0 ${connectionStatus === "Connected"
-                    ? "bg-emerald-500"
-                    : connectionStatus === "Failed to connect"
-                      ? "bg-red-400"
-                      : "bg-zinc-500"
-                    }`}
-                  aria-hidden
-                />
+              <span
+                className={`font-medium text-zinc-400 flex items-center gap-1.5 ${connectionStatus === "Connecting..." ? "animate-pulse ease-in-out" : ""}`}
+                title={connectionStatus}
+              >
+                <span className="relative inline-flex h-2 w-2 shrink-0">
+                  {connectionStatus === "Connecting..." && (
+                    <span
+                      className="absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"
+                      aria-hidden
+                    />
+                  )}
+                  <span
+                    className={`relative inline-block h-2 w-2 rounded-full ${connectionStatus === "Connected"
+                      ? "bg-emerald-500"
+                      : connectionStatus === "Failed to connect"
+                        ? "bg-red-400"
+                        : connectionStatus === "Connecting..."
+                          ? "bg-sky-400"
+                          : "bg-zinc-500"
+                      }`}
+                    aria-hidden
+                  />
+                </span>
                 {connectionStatus}
               </span>
 
@@ -345,10 +385,19 @@ export function Playground() {
             />
           </div>
         </div>
-        {displaySessionError && (
-          <div className="col-span-2 mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-200/90">{displaySessionError}</p>
+        {hasSessionError && displaySessionError != null && (
+          <div className="col-span-2 mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 flex items-start gap-3">
+            <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" aria-hidden />
+            <div className="min-w-0 flex-1 space-y-1">
+              {displaySessionErrorSource && (
+                <p className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">
+                  {displaySessionErrorSource === "agent" ? "Agent error" : "Bridge error"}
+                </p>
+              )}
+              <p className="text-sm text-amber-200/90 whitespace-pre-wrap break-words font-mono">
+                {displaySessionError}
+              </p>
+            </div>
           </div>
         )}
       </section>

@@ -16,7 +16,7 @@ export interface RunnerSession {
   runnerPid?: number;
   /** Agent command for STDIO (e.g. "meshaway"). */
   agentCommand?: string;
-  /** Agent args for STDIO (e.g. ["bridge", "--agent", "acp:gemini-cli"]). */
+  /** Agent args for STDIO (e.g. ["bridge", "--agent", "gemini-cli"]). */
   agentArgs?: string[];
 }
 

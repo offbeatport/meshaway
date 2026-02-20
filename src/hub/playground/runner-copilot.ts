@@ -13,14 +13,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 
-/** Extract --agent value from args, or "" if not present. */
 function extractAgentFromArgs(args: string[]): string {
   const i = args.indexOf("--agent");
   if (i >= 0 && i + 1 < args.length) return args[i + 1];
   return "";
 }
 
-/** Resolve agentCommand + agentArgs to { cmd, args } for spawning. When command is "meshaway" or empty, use tsx (source) or built meshaway. */
 export function resolveBridgeCommand(
   agentCommand: string,
   agentArgs: string[]
@@ -32,7 +30,7 @@ export function resolveBridgeCommand(
   const script = join(cwd, "src", "cli.ts");
   const built = join(cwd, "dist", "node", "meshaway.mjs");
   if (wantMeshaway) {
-    const args = agentArgs.length ? agentArgs : ["bridge", "--agent", agent || "acp:gemini-cli"];
+    const args = agentArgs.length ? agentArgs : ["bridge", "--agent", agent || "gemini-cli"];
     if (existsSync(script)) {
       const tsx = join(cwd, "node_modules", ".bin", "tsx");
       const runner = existsSync(tsx) ? tsx : "npx";
@@ -42,44 +40,10 @@ export function resolveBridgeCommand(
     if (existsSync(built)) {
       return { cmd: process.execPath, args: [built, ...args] };
     }
-    return { cmd: process.execPath, args: [built, "bridge", "--agent", agent || "acp:gemini-cli"] };
+    return { cmd: process.execPath, args: [built, "bridge", "--agent", agent || "gemini-cli"] };
   }
   return { cmd: agentCommand, args: agentArgs };
 }
-
-
-
-
-
-// /** SDK spawns the CLI process; we attach to stdout/stderr so the client can see subprocess output. */
-// function attachSubprocessFrames(
-//   client: CopilotClient,
-//   push: (type: string, payload: unknown) => void
-// ): void {
-//   const proc = (client as unknown as { cliProcess?: ChildProcess | null }).cliProcess;
-//   if (!proc) return;
-
-//   proc.stdout?.on("data", (chunk: Buffer | string) => {
-//     push("copilot.stdout", { text: chunk.toString() });
-//   });
-//   proc.stdout?.on("error", (err: Error) => {
-//     push("copilot.stdout.error", { message: err.message });
-//   });
-
-//   proc.stderr?.on("data", (chunk: Buffer | string) => {
-//     push("copilot.stderr", { text: chunk.toString() });
-//   });
-//   proc.stderr?.on("error", (err: Error) => {
-//     push("copilot.stderr.error", { message: err.message });
-//   });
-
-//   proc.on("error", (err: Error) => {
-//     push("copilot.subprocess.error", { message: err.message });
-//   });
-//   proc.on("exit", (code: number | null, signal: NodeJS.Signals | null) => {
-//     push("copilot.subprocess.exit", { code, signal: signal ?? undefined });
-//   });
-// }
 
 export interface CreateCopilotRunnerOptions {
   runnerSessionId: string;
@@ -94,10 +58,21 @@ export interface CopilotRunnerResult {
   session: CopilotSession;
   stop: () => Promise<void>;
 }
-/**
- * Create and start a Copilot client, create a session, wire event handlers to push frames.
- * Call stop() when disconnecting.
- */
+const AGENT_ERROR_PREFIX = "Agent: ";
+
+/** Capture stderr from bridge subprocess to detect agent vs bridge errors (bridge writes "Agent: ..." on agent failure). */
+function captureBridgeStderr(client: CopilotClient): string[] {
+  const lines: string[] = [];
+  const proc = (client as unknown as { cliProcess?: ChildProcess | null }).cliProcess;
+  if (!proc?.stderr) return lines;
+  proc.stderr.on("data", (chunk: Buffer | string) => {
+    const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    lines.push(...text.split(/\r?\n/).filter(Boolean));
+  });
+  return lines;
+}
+
+
 export async function createCopilotRunner(
   options: CreateCopilotRunnerOptions
 ): Promise<CopilotRunnerResult> {
@@ -105,6 +80,7 @@ export async function createCopilotRunner(
   const bridgeCommand = resolveBridgeCommand(cliPath, cliArgs);
 
   const push = addFrame;
+  push("copilot.client.starting", { cliPath, cliArgs: [...cliArgs], model });
   const client = new CopilotClient({
     cliPath: bridgeCommand.cmd || cliPath,
     cliArgs: bridgeCommand.args || cliArgs,
@@ -113,10 +89,24 @@ export async function createCopilotRunner(
   });
   await client.start();
 
+  const stderrLines = captureBridgeStderr(client);
   push("copilot.client.started", { cliPath, cliArgs: [...cliArgs], model });
 
+  let session: CopilotSession;
+  try {
+    session = await client.createSession({ model });
+  } catch (err) {
+    const agentLine = stderrLines.find((l) => l.startsWith(AGENT_ERROR_PREFIX));
+    const augmented = err instanceof Error ? err : new Error(String(err));
+    if (agentLine) {
+      (augmented as Error & { errorSource?: "agent" | "bridge" }).errorSource = "agent";
+      augmented.message = agentLine.slice(AGENT_ERROR_PREFIX.length);
+    } else {
+      (augmented as Error & { errorSource?: "agent" | "bridge" }).errorSource = "bridge";
+    }
+    throw augmented;
+  }
 
-  const session = await client.createSession({ model });
   push("copilot.session.created", {
     sessionId: session.sessionId,
     model,

@@ -40,7 +40,7 @@ export interface AppSelectItem<T> {
   /** Mute a prefix of the label (prefix shown in zinc-500, rest normal). */
   mutedPrefix?: string;
   selectedPrefix?: string;
-  /** Mute only this substring in the label (e.g. "acp: "). Rest of label stays normal. */
+  /** Mute only this substring in the label (e.g. " "). Rest of label stays normal. */
   mutedSegment?: string;
 }
 

@@ -1,7 +1,6 @@
 /** Environment variable names per init02 spec. */
 export const MESH_ENV = {
   AGENT: "MESH_AGENT",
-  BACKEND: "MESH_BACKEND",
   LISTEN: "MESH_LISTEN",
   HUB: "MESH_HUB",
   HUB_LISTEN: "MESH_HUB_LISTEN",

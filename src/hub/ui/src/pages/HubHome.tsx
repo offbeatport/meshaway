@@ -128,7 +128,7 @@ export function HubHome() {
               <p className="mt-3 text-sm text-zinc-500 max-w-sm mx-auto text-left">
                 <span className="block mb-2">Get started in 3 steps:</span>
                 <span className="block">1. Run <code className="text-zinc-400">meshaway hub</code> (this Hub)</span>
-                <span className="block mt-2">2. Connect via stdio: set Copilot SDK <code className="text-zinc-400">cliPath</code> to the meshaway binary and <code className="text-zinc-400">cliArgs</code> to <code className="text-zinc-400">["bridge", "--agent", "acp:gemini-cli"]</code> (or another ACP backend)</span>
+                <span className="block mt-2">2. Connect via stdio: set Copilot SDK <code className="text-zinc-400">cliPath</code> to the meshaway binary and <code className="text-zinc-400">cliArgs</code> to <code className="text-zinc-400">["bridge", "--agent", "gemini-cli"]</code> (or another ACP agent)</span>
                 <span className="block mt-2">3. Start a task — session appears here</span>
               </p>
             </div>

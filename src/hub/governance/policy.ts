@@ -1,15 +1,15 @@
-/** Basic routing policy. MVP: single backend. */
+/** Basic routing policy. MVP: single agent. */
 export interface RoutingRule {
   match?: string;
-  backend: string;
+  agent: string;
 }
 
-let defaultBackend: string | undefined;
+let defaultAgent: string | undefined;
 
-export function setDefaultBackend(backend: string): void {
-  defaultBackend = backend;
+export function setDefaultAgent(agent: string): void {
+  defaultAgent = agent;
 }
 
-export function getDefaultBackend(): string | undefined {
-  return defaultBackend;
+export function getDefaultAgent(): string | undefined {
+  return defaultAgent;
 }

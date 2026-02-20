@@ -121,7 +121,7 @@ export function useHealth(refreshInterval = 5000) {
 export function useHealthInfo() {
   const [healthInfo, setHealthInfo] = useState<{
     hub: boolean;
-    backend: string;
+    agent: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
