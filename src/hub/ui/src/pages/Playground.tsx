@@ -44,10 +44,10 @@ function FrameRow({ frame }: { frame: Frame }) {
 
   return (
     <div
-      className="border-b border-zinc-800/80 px-3 py-1.5 last:border-b-0 hover:bg-zinc-800/20 group"
+      className="grid grid-cols-[auto_1fr] gap-2 px-3 py-1.5 last:border-b-0"
     >
-      <div className="flex items-start gap-2">
-        <span className="text-zinc-500 shrink-0 select-none text-[11px]">{datetime}</span>
+      <div className="text-zinc-500 shrink-0 select-none text-[11px]">{datetime}</div>
+      <div className="flex items-start gap-2 p-3 hover:bg-zinc-800/20  rounded border border-zinc-800 bg-zinc-950 group">
         <div className="flex-1 min-w-0 space-y-0.5 text-[11px]">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-zinc-500 shrink-0">type:</span>
@@ -291,13 +291,12 @@ export function Playground() {
               <span className="text-zinc-500">Status:</span>
               <span className="font-medium text-zinc-400 flex items-center gap-1.5" title={connectionStatus}>
                 <span
-                  className={`inline-block h-2 w-2 rounded-full shrink-0 ${
-                    connectionStatus === "Connected"
-                      ? "bg-emerald-500"
-                      : connectionStatus === "Failed to connect"
-                        ? "bg-red-400"
-                        : "bg-zinc-500"
-                  }`}
+                  className={`inline-block h-2 w-2 rounded-full shrink-0 ${connectionStatus === "Connected"
+                    ? "bg-emerald-500"
+                    : connectionStatus === "Failed to connect"
+                      ? "bg-red-400"
+                      : "bg-zinc-500"
+                    }`}
                   aria-hidden
                 />
                 {connectionStatus}
@@ -345,9 +344,6 @@ export function Playground() {
               preClassName="flex-1 min-h-[100px] max-h-44 p-2.5 text-[11px] font-mono rounded overflow-auto"
             />
           </div>
-        </div>
-        <div className="col-span-2 text-[11px] text-zinc-500 mt-1 pt-1">
-          Backend CLI (e.g. gemini-cli) is installed and executed via <code className="text-zinc-400">npx</code> when the bridge runs.
         </div>
         {displaySessionError && (
           <div className="col-span-2 mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 flex items-start gap-2">
@@ -458,7 +454,7 @@ export function Playground() {
             {frames.length === 0 ? (
               <p className="text-xs text-zinc-500 font-mono">No log entries yet.</p>
             ) : (
-              <div className="rounded border border-zinc-800 bg-zinc-950 max-h-72 overflow-auto font-mono text-xs text-zinc-300">
+              <div className="max-h-72 overflow-auto font-mono text-xs text-zinc-300">
                 {frames
                   .filter((f) => !frameSearch || `${f.type} ${JSON.stringify(f.payload)}`.toLowerCase().includes(frameSearch.toLowerCase()))
                   .map((f) => (

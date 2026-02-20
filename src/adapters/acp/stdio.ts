@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
+import { getLogger } from "../../shared/logging.js";
 
 export interface AcpStdioAdapter {
   write(line: string): void;
@@ -24,8 +25,8 @@ export function createAcpStdioAdapter(
     for (const cb of listeners) cb(line);
   });
 
-  proc.stderr?.on("data", (chunk) => {
-    process.stderr.write(chunk);
+  proc.stderr?.on("data", (chunk: Buffer | string) => {
+    getLogger().info(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
   });
 
   return {

@@ -29,7 +29,7 @@ export function resolveBridgeCommand(
   const wantMeshaway = !agentCommand || agentCommand === "meshaway";
   const agent = extractAgentFromArgs(agentArgs);
   const cwd = process.cwd();
-  const script = join(cwd, "src", "cli", "index.ts");
+  const script = join(cwd, "src", "cli.ts");
   const built = join(cwd, "dist", "node", "meshaway.mjs");
   if (wantMeshaway) {
     const args = agentArgs.length ? agentArgs : ["bridge", "--agent", agent || "acp:gemini-cli"];
@@ -51,35 +51,35 @@ export function resolveBridgeCommand(
 
 
 
-/** SDK spawns the CLI process; we attach to stdout/stderr so the client can see subprocess output. */
-function attachSubprocessFrames(
-  client: CopilotClient,
-  push: (type: string, payload: unknown) => void
-): void {
-  const proc = (client as unknown as { cliProcess?: ChildProcess | null }).cliProcess;
-  if (!proc) return;
+// /** SDK spawns the CLI process; we attach to stdout/stderr so the client can see subprocess output. */
+// function attachSubprocessFrames(
+//   client: CopilotClient,
+//   push: (type: string, payload: unknown) => void
+// ): void {
+//   const proc = (client as unknown as { cliProcess?: ChildProcess | null }).cliProcess;
+//   if (!proc) return;
 
-  proc.stdout?.on("data", (chunk: Buffer | string) => {
-    push("copilot.stdout", { text: chunk.toString() });
-  });
-  proc.stdout?.on("error", (err: Error) => {
-    push("copilot.stdout.error", { message: err.message });
-  });
+//   proc.stdout?.on("data", (chunk: Buffer | string) => {
+//     push("copilot.stdout", { text: chunk.toString() });
+//   });
+//   proc.stdout?.on("error", (err: Error) => {
+//     push("copilot.stdout.error", { message: err.message });
+//   });
 
-  proc.stderr?.on("data", (chunk: Buffer | string) => {
-    push("copilot.stderr", { text: chunk.toString() });
-  });
-  proc.stderr?.on("error", (err: Error) => {
-    push("copilot.stderr.error", { message: err.message });
-  });
+//   proc.stderr?.on("data", (chunk: Buffer | string) => {
+//     push("copilot.stderr", { text: chunk.toString() });
+//   });
+//   proc.stderr?.on("error", (err: Error) => {
+//     push("copilot.stderr.error", { message: err.message });
+//   });
 
-  proc.on("error", (err: Error) => {
-    push("copilot.subprocess.error", { message: err.message });
-  });
-  proc.on("exit", (code: number | null, signal: NodeJS.Signals | null) => {
-    push("copilot.subprocess.exit", { code, signal: signal ?? undefined });
-  });
-}
+//   proc.on("error", (err: Error) => {
+//     push("copilot.subprocess.error", { message: err.message });
+//   });
+//   proc.on("exit", (code: number | null, signal: NodeJS.Signals | null) => {
+//     push("copilot.subprocess.exit", { code, signal: signal ?? undefined });
+//   });
+// }
 
 export interface CreateCopilotRunnerOptions {
   runnerSessionId: string;
@@ -111,12 +111,10 @@ export async function createCopilotRunner(
     useStdio: true,
     autoStart: false,
   });
-
   await client.start();
 
   push("copilot.client.started", { cliPath, cliArgs: [...cliArgs], model });
 
-  attachSubprocessFrames(client, push);
 
   const session = await client.createSession({ model });
   push("copilot.session.created", {

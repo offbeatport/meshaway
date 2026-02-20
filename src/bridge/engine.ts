@@ -9,7 +9,6 @@ import {
   AcpPromptParamsSchema,
   AcpSessionCancelParamsSchema,
   AcpRequestPermissionParamsSchema,
-  AcpRequestSchema,
 } from "../protocols/acp/types.js";
 import { CopilotPromptParamsSchema } from "../protocols/copilot/types.js";
 import { sessionStore } from "../hub/store/memory.js";
@@ -169,12 +168,12 @@ export class BridgeEngine {
 
   private ensureHubSession(localSessionId: string): void {
     sessionStore.ensureSession(localSessionId);
-    this.hubLink?.reportSessionStart(localSessionId).catch(() => {});
+    this.hubLink?.reportSessionStart(localSessionId).catch(() => { });
   }
 
   private addFrameAndReport(sessionId: string, type: string, payload: unknown, redacted = true): void {
     const frame = sessionStore.addFrame(sessionId, type, payload, redacted);
-    if (frame) this.hubLink?.reportFrame(sessionId, type, payload).catch(() => {});
+    if (frame) this.hubLink?.reportFrame(sessionId, type, payload).catch(() => { });
   }
 
   private async handleCopilotPrompt(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {

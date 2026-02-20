@@ -13,7 +13,7 @@ import {
   ArrowUpDown,
   Filter,
 } from "lucide-react";
-import { useSessions, useHealthInfo } from "@/lib/useApi";
+import { useSessions } from "@/lib/useApi";
 import { formatRelativeTime, formatDateTime, truncateId, formatDuration } from "@/lib/format";
 import { SkeletonCard } from "@/components/SkeletonCard";
 import { getSessionExportUrl } from "@/lib/api";

@@ -1,41 +1,67 @@
 /**
- * Bridge stdio mode: stdin = JSON-RPC in, stdout = JSON-RPC out, stderr = logs.
+ * Bridge stdio mode: stdin/stdout use LSP/vscode-jsonrpc format (Content-Length header + JSON body).
+ * stderr = logs only.
  */
 
-import { createInterface } from "node:readline";
 import { BridgeEngine } from "./engine.js";
 
+const HEADER_END = "\r\n\r\n";
+
 function writeResponse(obj: unknown): void {
-  process.stdout.write(JSON.stringify(obj) + "\n");
+  const body = JSON.stringify(obj);
+  const buf = Buffer.from(body, "utf8");
+  process.stdout.write(`Content-Length: ${buf.length}\r\n\r\n`, "utf8");
+  process.stdout.write(buf);
+}
+
+function readContentLengthHeader(header: string): number | null {
+  const match = /Content-Length:\s*(\d+)/i.exec(header);
+  return match ? parseInt(match[1], 10) : null;
 }
 
 export function runStdioBridge(agent?: string, agentArgs?: string[]): void {
   const engine = new BridgeEngine({ agent, agentArgs });
-  const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
   let stdinClosed = false;
+  let buffer = Buffer.alloc(0);
+  let expectingBody = false;
+  let bodyLength = 0;
 
-  rl.on("line", async (line) => {
-    let body: unknown;
-    try {
-      body = JSON.parse(line) as unknown;
-    } catch {
-      writeResponse({
-        jsonrpc: "2.0",
-        id: null,
-        error: { code: -32700, message: "Parse error" },
-      });
+  process.stdin.on("data", async (chunk: Buffer) => {
+    buffer = Buffer.concat([buffer, chunk]);
+    for (; ;) {
+      if (!expectingBody) {
+        const idx = buffer.indexOf(HEADER_END);
+        if (idx === -1) break;
+        const header = buffer.subarray(0, idx).toString("utf8");
+        buffer = buffer.subarray(idx + HEADER_END.length);
+        bodyLength = readContentLengthHeader(header) ?? 0;
+        expectingBody = true;
+      }
+      if (buffer.length < bodyLength) break;
+      const bodyBytes = buffer.subarray(0, bodyLength);
+      buffer = buffer.subarray(bodyLength);
+      expectingBody = false;
+      let body: unknown;
+      try {
+        body = JSON.parse(bodyBytes.toString("utf8")) as unknown;
+      } catch {
+        writeResponse({
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32700, message: "Parse error", data: { body: bodyBytes.toString("utf8").slice(0, 80) } },
+        });
+        if (stdinClosed) engine.close();
+        continue;
+      }
+      const handled = await engine.handleIncoming(body);
+      if (handled.payload) {
+        writeResponse(handled.payload);
+      }
       if (stdinClosed) engine.close();
-      return;
     }
-
-    const handled = await engine.handleIncoming(body);
-    if (handled.payload) {
-      writeResponse(handled.payload);
-    }
-    if (stdinClosed) engine.close();
   });
 
-  rl.on("close", () => {
+  process.stdin.on("end", () => {
     stdinClosed = true;
   });
 }

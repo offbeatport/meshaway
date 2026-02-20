@@ -8,9 +8,9 @@
   },
   "scripts": {
     "build": "tsx scripts/build.ts",
-    "dev": "tsx watch src/cli/index.ts",
+    "dev": "tsx watch src/cli.ts",
     "dev:hub": "concurrently -k -n hub-server,hub-ui -c cyan,magenta \"pnpm run dev:hub-server\" \"pnpm run dev:hub-ui\"",
-    "dev:hub-server": "tsx watch src/cli/index.ts hub --no-open",
+    "dev:hub-server": "tsx watch src/cli.ts hub --no-open",
     "dev:hub-ui": "vite --config src/hub/ui/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

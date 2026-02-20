@@ -4,6 +4,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { EXIT, exit } from "../shared/errors.js";
+import { getLogger } from "../shared/logging.js";
 import { genId } from "../shared/ids.js";
 import { sessionStore } from "./store/memory.js";
 import { runnerStore } from "./store/runner.js";
@@ -211,20 +212,21 @@ export function createHubApp(): Hono {
     };
 
     try {
-
       const { session, stop } = await createCopilotRunner({
         runnerSessionId,
         addFrame,
         cliPath,
         cliArgs
       });
+      console.log("Copilot runner created", runnerSessionId, session, stop);
       activeRunners.set(runnerSessionId, { session, stop });
-
+      console.log("Active runners", activeRunners);
       return c.json({
         runnerSessionId,
         bridgeType: "stdio"
       });
     } catch (err) {
+      console.error("Error creating Copilot runner", err);
       const message = err instanceof Error ? err.message : "Failed to start agent";
       runnerStore.update(runnerSessionId, { status: "error" });
       runnerStore.addFrame(runnerSessionId, "session.error", { message });
@@ -329,8 +331,9 @@ export async function startHub(options: HubServeOptions): Promise<HubHandle> {
 
   nodeServer.on("error", (err: NodeJS.ErrnoException) => {
     if (err?.code === "EADDRINUSE") {
-      process.stderr.write(
-        `ERROR: Cannot listen on ${host}:${port} (EADDRINUSE).\nFix: choose a different port with --hub-listen ${host}:<port>\n`
+      getLogger().error(
+        { err, host, port },
+        `Cannot listen on ${host}:${port} (EADDRINUSE). Fix: choose a different port with --listen ${host}:<port>`
       );
       exit(EXIT.SERVER_FAILURE);
     }

@@ -1,3 +1,5 @@
+import { getLogger } from "./logging.js";
+
 /** CLI exit codes. */
 export const EXIT = {
   SUCCESS: 0,
@@ -9,8 +11,8 @@ export const EXIT = {
 
 export function exit(code: number, message?: string): never {
   if (message) {
-    if (code === EXIT.SUCCESS) process.stdout.write(`${message}\n`);
-    else process.stderr.write(`${message}\n`);
+    if (code === EXIT.SUCCESS) getLogger().info(message);
+    else getLogger().error(message);
   }
   process.exit(code);
 }

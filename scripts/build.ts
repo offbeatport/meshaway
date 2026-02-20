@@ -31,7 +31,7 @@ async function buildNode() {
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
 
   await build({
-    entryPoints: [join(root, "src", "cli", "index.ts")],
+    entryPoints: [join(root, "src", "cli.ts")],
     bundle: true,
     platform: "node",
     target: "node20",
