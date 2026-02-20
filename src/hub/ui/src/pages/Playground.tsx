@@ -24,9 +24,68 @@ import {
   type Frame,
 } from "@/lib/api";
 
-type Dialect = "copilot" | "acp";
+function formatFrameValue(v: unknown): string {
+  if (v === null) return "null";
+  if (v === undefined) return "—";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (Array.isArray(v)) return v.map((x) => formatFrameValue(x)).join(", ");
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
 
-type PipelineId = "copilot-stdio-gemini" | "copilot-stdio-claude" | "copilot-stdio-opencode" | "acp-stdio-opencode";
+function FrameRow({ frame }: { frame: Frame }) {
+  const datetime = new Date(frame.timestamp).toISOString();
+  const payloadObj =
+    frame.payload !== null && typeof frame.payload === "object" && !Array.isArray(frame.payload)
+      ? (frame.payload as Record<string, unknown>)
+      : null;
+  const copyJson = JSON.stringify({ type: frame.type, payload: frame.payload }, null, 2);
+
+  return (
+    <div
+      className="border-b border-zinc-800/80 px-3 py-1.5 last:border-b-0 hover:bg-zinc-800/20 group"
+    >
+      <div className="flex items-start gap-2">
+        <span className="text-zinc-500 shrink-0 select-none text-[11px]">{datetime}</span>
+        <div className="flex-1 min-w-0 space-y-0.5 text-[11px]">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-zinc-500 shrink-0">type:</span>
+            <span className="text-sky-400/90 font-medium">{frame.type}</span>
+            {frame.redacted && (
+              <span className="text-amber-500/80 text-[10px]">redacted</span>
+            )}
+          </div>
+          {payloadObj && Object.keys(payloadObj).length > 0 && (
+            <div className="text-zinc-400 space-y-0.5 pl-0">
+              {Object.entries(payloadObj).map(([key, value]) => (
+                <div key={key} className="flex gap-2 flex-wrap">
+                  <span className="text-zinc-500 shrink-0">{key}:</span>
+                  <span className="break-words min-w-0">{formatFrameValue(value)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {!payloadObj && frame.payload !== undefined && frame.payload !== null && (
+            <div className="flex gap-2 flex-wrap">
+              <span className="text-zinc-500 shrink-0">payload:</span>
+              <span className="break-words min-w-0">{formatFrameValue(frame.payload)}</span>
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => void navigator.clipboard?.writeText(copyJson)}
+          className="text-zinc-500 hover:text-sky-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          Copy
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type PipelineId = "copilot-stdio-gemini" | "copilot-stdio-claude" | "copilot-stdio-opencode";
 
 const PIPELINE_OPTIONS: {
   value: PipelineId;
@@ -34,21 +93,18 @@ const PIPELINE_OPTIONS: {
   part1: string;
   part2: string;
   part3: string;
-  dialect: Dialect;
   /** Agent command (e.g. "meshaway"). User specifies CLI path locally. */
   agentCommand: string;
-  /** Agent args to spawn bridge (e.g. ["bridge", "--backend", "acp:gemini-cli"]). */
+  /** Agent args to spawn bridge (e.g. ["bridge", "--agent", "acp:gemini-cli"]). */
   agentArgs: string[];
 }[] = [
-    { value: "copilot-stdio-gemini", label: "Github Copilot SDK > stdio: Bridge > acp: Gemini", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Gemini", dialect: "copilot", agentCommand: "meshaway", agentArgs: ["bridge", "--backend", "acp:gemini-cli"] },
-    { value: "copilot-stdio-claude", label: "Github Copilot SDK > stdio: Bridge > acp: Claude Code", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Claude Code", dialect: "copilot", agentCommand: "meshaway", agentArgs: ["bridge", "--backend", "acp:claude"] },
-    { value: "copilot-stdio-opencode", label: "Github Copilot SDK > stdio: Bridge > acp: OpenCode", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: OpenCode", dialect: "copilot", agentCommand: "meshaway", agentArgs: ["bridge", "--backend", "acp:opencode"] },
-    { value: "acp-stdio-opencode", label: "ACP Client SDK > stdio: Bridge > acp: OpenCode", part1: "ACP Client SDK", part2: "stdio: Bridge", part3: "acp: OpenCode", dialect: "acp", agentCommand: "meshaway", agentArgs: ["bridge", "--backend", "acp:opencode"] },
+    { value: "copilot-stdio-gemini", label: "Github Copilot SDK > stdio: Bridge > acp: Gemini", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Gemini", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "acp:gemini-cli"] },
+    { value: "copilot-stdio-claude", label: "Github Copilot SDK > stdio: Bridge > acp: Claude Code", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Claude Code", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "acp:claude"] },
+    { value: "copilot-stdio-opencode", label: "Github Copilot SDK > stdio: Bridge > acp: OpenCode", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: OpenCode", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "acp:opencode"] },
   ];
 
 export function Playground() {
   const [selectedPipeline, setSelectedPipeline] = useState<PipelineId>("copilot-stdio-gemini");
-  const [dialect, setDialect] = useState<Dialect>("copilot");
   const [runnerSessionId, setRunnerSessionId] = useState("");
   const [sessionId, setSessionId] = useState("");
   const runnerSessionIdRef = useRef("");
@@ -66,43 +122,50 @@ export function Playground() {
   } | null>(null);
   const [frames, setFrames] = useState<Frame[]>([]);
   const [framesOpen, setFramesOpen] = useState(true);
-  const [framesTab, setFramesTab] = useState<"events" | "frames">("events");
   const [frameSearch, setFrameSearch] = useState("");
-  const [highlightedFrameId, setHighlightedFrameId] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   const activeRunnerSessionId = lastResult?.runnerSessionId ?? runnerSessionId;
   runnerSessionIdRef.current = activeRunnerSessionId;
   const selectedOption = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
-  const clientStatus = lastResult?.error ? "Error" : "Ready";
-  const bridgeStatus = activeRunnerSessionId ? (lastResult?.error ? "Error" : "Connected") : "Disconnected";
-  const backendStatus = activeRunnerSessionId ? (lastResult?.error ? "Error" : "Connected") : "Pending";
+  const lastSessionErrorFrame = [...frames].reverse().find((f) => f.type === "session.error");
+  const sessionErrorFromFrame =
+    lastSessionErrorFrame && lastSessionErrorFrame.payload && typeof lastSessionErrorFrame.payload === "object" && "message" in lastSessionErrorFrame.payload
+      ? String((lastSessionErrorFrame.payload as { message: unknown }).message)
+      : null;
+  const displaySessionError = sessionError ?? sessionErrorFromFrame;
+  const hasSessionCreated = frames.some((f) => f.type === "copilot.session.created");
+  const connectionStatus: "Connected" | "Disconnected" | "Failed to connect" | "Connecting..." = !activeRunnerSessionId
+    ? "Disconnected"
+    : hasSessionCreated
+      ? "Connected"
+      : displaySessionError
+        ? "Failed to connect"
+        : "Connecting...";
 
   const handlePipelineChange = (value: PipelineId) => {
     const option = PIPELINE_OPTIONS.find((p) => p.value === value);
     if (!option) return;
     setSelectedPipeline(value);
-    setDialect(option.dialect);
   };
   const agentArgsJson =
     "[\n" +
     selectedOption.agentArgs.map((a) => `    "${a}"`).join(",\n") +
     ",\n  ]";
-  const clientCode =
-    dialect === "copilot"
-      ? `const client = new CopilotClient({
+  const clientCode = `const client = new CopilotClient({
   cliPath: "meshaway",
   cliArgs: ${agentArgsJson},
-});`
-      : `const client = new AcpClient({
-  command: "meshaway",
-  args: ${agentArgsJson},
 });`;
 
 
 
   const resetRunner = useCallback(() => {
     const id = runnerSessionIdRef.current;
-    if (id) playgroundControl(id, "reset").catch(() => { });
+    if (id) {
+      playgroundControl(id, "reset").catch((err: unknown) => {
+        setSessionError(err instanceof Error ? err.message : "Disconnect failed");
+      });
+    }
     setRunnerSessionId("");
     setSessionId("");
     setFrames([]);
@@ -110,11 +173,11 @@ export function Playground() {
   }, []);
 
   const handleConnect = useCallback(() => {
+    setSessionError(null);
     const option = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
     createPlaygroundSession({
-      clientType: dialect,
-      agentCommand: option.agentCommand,
-      agentArgs: option.agentArgs,
+      cliPath: option.agentCommand,
+      cliArgs: option.agentArgs,
     })
       .then(({ runnerSessionId: id, bridgeType, agentExec, agentArgs }) => {
         setRunnerSessionId(id);
@@ -126,13 +189,20 @@ export function Playground() {
           agentArgs,
         });
       })
-      .catch(() => { });
-  }, [dialect, selectedPipeline]);
+      .catch((err: unknown) => {
+        setSessionError(err instanceof Error ? err.message : "Connection failed");
+        const runnerId = (err as Error & { runnerSessionId?: string }).runnerSessionId;
+        if (runnerId) {
+          setRunnerSessionId(runnerId);
+          setLastResult((prev) => (prev ? { ...prev, runnerSessionId: runnerId } : { runnerSessionId: runnerId }));
+        }
+      });
+  }, [selectedPipeline]);
 
   useEffect(() => {
     resetRunner();
     handleConnect();
-  }, [dialect, selectedPipeline, resetRunner, handleConnect]);
+  }, [selectedPipeline, resetRunner, handleConnect]);
 
   const loadFrames = useCallback(async () => {
     if (!activeRunnerSessionId) return;
@@ -158,7 +228,6 @@ export function Playground() {
     const option = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
     try {
       const res = await sendPlaygroundRunner({
-        clientType: dialect,
         agentCommand: option.agentCommand,
         agentArgs: option.agentArgs,
         prompt: prompt.trim(),
@@ -202,7 +271,7 @@ export function Playground() {
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-5 space-y-4">
         <h2 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
           <Settings className="h-4 w-4" />
-          Client Configuration
+          Client Session
         </h2>
         <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
           <div className="flex flex-col max-w-md">
@@ -218,62 +287,48 @@ export function Playground() {
               placeholder="Select a pipeline configuration..."
             />
 
-            <div className="mt-3 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-[11px]">
+            <div className="mt-3 grid grid-cols-[auto_1fr] items-center gap-x-8 gap-y-2 text-[11px]">
               <span className="text-zinc-500">Status:</span>
-              <span className="font-medium text-zinc-400 flex items-center gap-1.5">
+              <span className="font-medium text-zinc-400 flex items-center gap-1.5" title={connectionStatus}>
                 <span
-                  title={`Client: ${clientStatus}`}
-                  className="flex items-center gap-1 cursor-default"
-                >
-                  <span
-                    className={`inline-block h-2 w-2 rounded-full shrink-0 ${clientStatus === "Error" ? "bg-red-400" : "bg-emerald-500"}`}
-                    aria-hidden
-                  />
-                  Client
-                </span>
-                <span className="text-zinc-600">→</span>
-                <span
-                  title={`Bridge: ${bridgeStatus}`}
-                  className="flex items-center gap-1 cursor-default"
-                >
-                  <span
-                    className={`inline-block h-2 w-2 rounded-full shrink-0 ${bridgeStatus === "Error" ? "bg-red-400" : bridgeStatus === "Connected" ? "bg-emerald-500" : "bg-zinc-500"}`}
-                    aria-hidden
-                  />
-                  Bridge
-                </span>
-                <span className="text-zinc-600">→</span>
-                <span
-                  title={`Backend: ${backendStatus}`}
-                  className="flex items-center gap-1 cursor-default"
-                >
-                  <span
-                    className={`inline-block h-2 w-2 rounded-full shrink-0 ${backendStatus === "Error" ? "bg-red-400" : backendStatus === "Connected" ? "bg-emerald-500" : "bg-zinc-500"}`}
-                    aria-hidden
-                  />
-                  Backend
-                </span>
+                  className={`inline-block h-2 w-2 rounded-full shrink-0 ${
+                    connectionStatus === "Connected"
+                      ? "bg-emerald-500"
+                      : connectionStatus === "Failed to connect"
+                        ? "bg-red-400"
+                        : "bg-zinc-500"
+                  }`}
+                  aria-hidden
+                />
+                {connectionStatus}
               </span>
+
               <span className="text-zinc-500">Session ID:</span>
               <div className="flex min-w-0 items-center gap-2">
                 <code className="min-w-0 flex-1 truncate font-mono text-zinc-300">{activeRunnerSessionId || "—"}</code>
-
               </div>
+
+
+              <span className="text-zinc-500">Transport:</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <code className="min-w-0 flex-1 truncate font-mono text-zinc-300">stdio</code>
+              </div>
+
               <span className="text-zinc-500">Manage:</span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
                 <button
                   type="button"
                   onClick={handleConnect}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-zinc-200 hover:bg-zinc-700"
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-zinc-200 hover:bg-zinc-700"
                 >
                   <Plug className="h-3.5 w-3.5" />
                   Reconnect
                 </button>
-                /
+                <span className="text-zinc-500 px-1" aria-hidden>/</span>
                 <button
                   type="button"
                   onClick={resetRunner}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-zinc-200 hover:bg-zinc-700"
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-zinc-200 hover:bg-zinc-700"
                 >
                   <Unplug className="h-3.5 w-3.5" />
                   Disconnect
@@ -291,11 +346,16 @@ export function Playground() {
             />
           </div>
         </div>
+        <div className="col-span-2 text-[11px] text-zinc-500 mt-1 pt-1">
+          Backend CLI (e.g. gemini-cli) is installed and executed via <code className="text-zinc-400">npx</code> when the bridge runs.
+        </div>
+        {displaySessionError && (
+          <div className="col-span-2 mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-200/90">{displaySessionError}</p>
+          </div>
+        )}
       </section>
-
-
-
-
 
       {/* Message + Send + Response */}
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
@@ -370,7 +430,7 @@ export function Playground() {
         )}
       </section>
 
-      {/* Raw frames viewer */}
+      {/* Logging console (frames) */}
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
         <button
           type="button"
@@ -379,7 +439,7 @@ export function Playground() {
         >
           <span className="flex items-center gap-2">
             <Layers className="h-4 w-4" />
-            Raw frames
+            Console
             <span className="rounded-full border border-zinc-700 bg-zinc-900/60 px-2 py-0.5 text-[11px] text-zinc-400">
               {frames.length}
             </span>
@@ -388,73 +448,21 @@ export function Playground() {
         </button>
         {framesOpen && (
           <div className="mt-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setFramesTab("events")}
-                className={`px-2.5 py-1 rounded text-xs ${framesTab === "events" ? "bg-zinc-700 text-zinc-100" : "bg-zinc-800/50 text-zinc-400"}`}
-              >
-                Events
-              </button>
-              <button
-                type="button"
-                onClick={() => setFramesTab("frames")}
-                className={`px-2.5 py-1 rounded text-xs ${framesTab === "frames" ? "bg-zinc-700 text-zinc-100" : "bg-zinc-800/50 text-zinc-400"}`}
-              >
-                Frames
-              </button>
-              <input
-                type="text"
-                value={frameSearch}
-                onChange={(e) => setFrameSearch(e.target.value)}
-                placeholder="Search frames"
-                className="ml-auto w-full max-w-56 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200"
-              />
-            </div>
+            <input
+              type="text"
+              value={frameSearch}
+              onChange={(e) => setFrameSearch(e.target.value)}
+              placeholder="Search"
+              className="w-full max-w-56 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 font-mono"
+            />
             {frames.length === 0 ? (
-              <p className="text-xs text-zinc-500">No frames yet.</p>
-            ) : framesTab === "events" ? (
-              <div className="space-y-1.5 max-h-64 overflow-auto">
-                {frames
-                  .filter((f) => !frameSearch || `${f.type} ${JSON.stringify(f.payload)}`.toLowerCase().includes(frameSearch.toLowerCase()))
-                  .map((f) => (
-                    <button
-                      key={`event-${f.id}`}
-                      type="button"
-                      onClick={() => {
-                        setHighlightedFrameId(f.id);
-                        setFramesTab("frames");
-                      }}
-                      className="w-full text-left rounded border border-zinc-700 bg-zinc-900/50 px-3 py-2 hover:bg-zinc-800/60"
-                    >
-                      <div className="text-xs text-zinc-200 font-mono truncate">{f.type}</div>
-                      <div className="text-[11px] text-zinc-500">{new Date(f.timestamp).toISOString()}</div>
-                    </button>
-                  ))}
-              </div>
+              <p className="text-xs text-zinc-500 font-mono">No log entries yet.</p>
             ) : (
-              <div className="space-y-2 max-h-72 overflow-auto">
+              <div className="rounded border border-zinc-800 bg-zinc-950 max-h-72 overflow-auto font-mono text-xs text-zinc-300">
                 {frames
                   .filter((f) => !frameSearch || `${f.type} ${JSON.stringify(f.payload)}`.toLowerCase().includes(frameSearch.toLowerCase()))
                   .map((f) => (
-                    <div
-                      key={`frame-${f.id}`}
-                      className={`rounded border p-2 ${highlightedFrameId === f.id ? "border-sky-500/50 bg-sky-500/10" : "border-zinc-700 bg-zinc-900/50"}`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <code className="text-xs text-zinc-300 font-mono">{f.type}</code>
-                        <button
-                          type="button"
-                          onClick={() => void navigator.clipboard?.writeText(JSON.stringify(f.payload, null, 2))}
-                          className="text-[11px] text-sky-400 hover:text-sky-300"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                      <pre className="text-[11px] text-zinc-400 overflow-auto whitespace-pre-wrap">
-                        {JSON.stringify(f.payload, null, 2)}
-                      </pre>
-                    </div>
+                    <FrameRow key={`frame-${f.id}`} frame={f} />
                   ))}
               </div>
             )}

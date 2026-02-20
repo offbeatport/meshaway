@@ -78,10 +78,9 @@ export interface PlaygroundSendResult {
 
 /** Runner-based playground send (server-side Runner; stdio Bridge). */
 export interface PlaygroundRunnerSendParams {
-  clientType: "copilot" | "acp";
   /** Agent command (e.g. "meshaway"). */
   agentCommand?: string;
-  /** Agent args (e.g. ["bridge", "--backend", "acp:gemini-cli"]). */
+  /** Agent args (e.g. ["bridge", "--agent", "acp:gemini-cli"]). */
   agentArgs?: string[];
   prompt: string;
   runnerSessionId?: string;
@@ -112,12 +111,11 @@ export async function sendPlaygroundRunner(
   return data;
 }
 
+/** Single object passed to Copilot; server resolves cliPath to executable (e.g. tsx) and prepends script path to cliArgs. */
 export interface CreatePlaygroundSessionParams {
-  clientType?: "copilot" | "acp";
-  transport?: "tcp" | "stdio";
-  bridgeTarget?: string;
-  agentCommand?: string;
-  agentArgs?: string[];
+  cliPath?: string;
+  cliArgs?: string[];
+  model?: string;
 }
 
 export async function createPlaygroundSession(
@@ -141,7 +139,11 @@ export async function createPlaygroundSession(
     agentArgs?: string[];
     error?: string;
   };
-  if (!res.ok) throw new Error(data?.error ?? `Create session failed: ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(data?.error ?? `Create session failed: ${res.status}`) as Error & { runnerSessionId?: string };
+    err.runnerSessionId = data?.runnerSessionId;
+    throw err;
+  }
   if (!data.runnerSessionId) throw new Error("No runnerSessionId in response");
   return {
     runnerSessionId: data.runnerSessionId,

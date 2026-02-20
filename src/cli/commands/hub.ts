@@ -2,7 +2,6 @@ import { startHub } from "../../hub/server.js";
 import { parseListen } from "../../shared/net.js";
 import { initLogger } from "../../shared/logging.js";
 import { EXIT, exit } from "../../shared/errors.js";
-import { DEFAULT_HUB_LISTEN } from "../../shared/constants.js";
 import { openBrowser } from "../utils.js";
 
 export async function runHub(
@@ -25,7 +24,9 @@ export async function runHub(
     const url = `http://${handle.host}:${handle.port}`;
     process.stderr.write(`Hub UI:      ${url}\n`);
     process.stderr.write(`Press Ctrl+C to stop.\n`);
-    openBrowser(url);
+    if (opts.open !== false && !process.env.MESH_NO_OPEN_BROWSER) {
+      openBrowser(url);
+    }
 
     await new Promise<void>((_, reject) => {
       process.on("SIGINT", () =>

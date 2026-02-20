@@ -8,8 +8,10 @@
   },
   "scripts": {
     "build": "tsx scripts/build.ts",
-    "dev": "concurrently -k -n hub-be,hub-ui -c cyan,magenta \"cross-env MESH_NO_OPEN_BROWSER=1 pnpm exec tsx watch src/cli/index.ts hub\" \"cross-env MESH_HUB_URL=http://127.0.0.1:7337 pnpm run dev:ui\"",
-    "dev:ui": "vite --config src/hub/ui/vite.config.ts",
+    "dev": "tsx watch src/cli/index.ts",
+    "dev:hub": "concurrently -k -n hub-server,hub-ui -c cyan,magenta \"pnpm run dev:hub-server\" \"pnpm run dev:hub-ui\"",
+    "dev:hub-server": "tsx watch src/cli/index.ts hub --no-open",
+    "dev:hub-ui": "vite --config src/hub/ui/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run src/test/unit",

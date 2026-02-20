@@ -15,7 +15,7 @@ export async function runDoctor(
 
   process.stderr.write("\n");
   process.stderr.write("Fix:\n");
-  process.stderr.write("  - ACP backend:  meshaway bridge --backend acp:gemini-cli\n");
+  process.stderr.write("  - ACP backend:  meshaway bridge --agent acp:gemini-cli\n");
   process.stderr.write("  - Or set:      MESH_BACKEND=...\n");
   process.stderr.write("───────────────────────────────────────────────────────────────\n");
 }

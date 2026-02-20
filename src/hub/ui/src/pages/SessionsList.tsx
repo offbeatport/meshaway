@@ -16,7 +16,6 @@ import {
 import { useSessions, useHealthInfo } from "@/lib/useApi";
 import { formatRelativeTime, formatDateTime, truncateId, formatDuration } from "@/lib/format";
 import { SkeletonCard } from "@/components/SkeletonCard";
-import { CopyBridgeUrl } from "@/components/CopyBridgeUrl";
 import { getSessionExportUrl } from "@/lib/api";
 import type { Session } from "@/lib/api";
 
@@ -64,11 +63,10 @@ function sessionTokens(s: Session): number {
 
 export function SessionsList() {
   const { sessions, loading, error, refresh } = useSessions(4000);
-  const { healthInfo } = useHealthInfo();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("startTime");
   const [sortAsc, setSortAsc] = useState(false);
-  const [backendFilter, setBackendFilter] = useState<string>("all");
+  const [agentFilter, setAgentFilter] = useState<string>("all");
   const [metricsOpen, setMetricsOpen] = useState(true);
   const [replayOpen, setReplayOpen] = useState(true);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
@@ -88,14 +86,14 @@ export function SessionsList() {
   const filteredSessions = useMemo(() => {
     let list = sessions;
     if (statusFilter !== "all") list = list.filter((s) => s.status === statusFilter);
-    if (backendFilter !== "all") {
+    if (agentFilter !== "all") {
       list = list.filter((s) => {
-        const backend = (s as Session & { backend?: string }).backend;
-        return backend === backendFilter;
+        const agent = (s as Session & { backend?: string }).backend;
+        return agent === agentFilter;
       });
     }
     return list;
-  }, [sessions, statusFilter, backendFilter]);
+  }, [sessions, statusFilter, agentFilter]);
 
   const sortedSessions = useMemo(() => {
     const list = [...filteredSessions];
@@ -128,11 +126,11 @@ export function SessionsList() {
     return { active, completed, killed, totalFrames, totalTokens };
   }, [sessions]);
 
-  const backends = useMemo(() => {
+  const agents = useMemo(() => {
     const set = new Set<string>();
     sessions.forEach((s) => {
-      const b = (s as Session & { backend?: string }).backend;
-      if (b) set.add(b);
+      const a = (s as Session & { backend?: string }).backend;
+      if (a) set.add(a);
     });
     return Array.from(set);
   }, [sessions]);
@@ -301,9 +299,9 @@ export function SessionsList() {
             >
               <Filter className="h-4 w-4" />
               Filter
-              {(statusFilter !== "all" || backendFilter !== "all") && (
+              {(statusFilter !== "all" || agentFilter !== "all") && (
                 <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-sky-500/20 text-sky-600 dark:text-sky-400 text-xs font-medium">
-                  {[statusFilter !== "all", backendFilter !== "all"].filter(Boolean).length}
+                  {[statusFilter !== "all", agentFilter !== "all"].filter(Boolean).length}
                 </span>
               )}
             </button>
@@ -323,28 +321,28 @@ export function SessionsList() {
                     {value === "all" ? "All status" : value.charAt(0).toUpperCase() + value.slice(1)}
                   </button>
                 ))}
-                {backends.length > 0 && (
+                {agents.length > 0 && (
                   <>
                     <p className="px-3 py-1.5 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                      Backend
+                      Agent
                     </p>
                     <button
                       type="button"
-                      onClick={() => { setBackendFilter("all"); setFilterMenuOpen(false); }}
-                      className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 ${backendFilter === "all" ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
+                      onClick={() => { setAgentFilter("all"); setFilterMenuOpen(false); }}
+                      className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 ${agentFilter === "all" ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
                         }`}
                     >
-                      All backends
+                      All agents
                     </button>
-                    {backends.map((b) => (
+                    {agents.map((a) => (
                       <button
-                        key={b}
+                        key={a}
                         type="button"
-                        onClick={() => { setBackendFilter(b); setFilterMenuOpen(false); }}
-                        className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 truncate ${backendFilter === b ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
+                        onClick={() => { setAgentFilter(a); setFilterMenuOpen(false); }}
+                        className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 truncate ${agentFilter === a ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
                           }`}
                       >
-                        {b}
+                        {a}
                       </button>
                     ))}
                   </>
@@ -376,7 +374,7 @@ export function SessionsList() {
                 <th className="text-right py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Frames</th>
                 <th className="text-right py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Latency</th>
                 <th className="text-right py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Tokens</th>
-                <th className="text-left py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Backend</th>
+                <th className="text-left py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Agent</th>
                 <th className="text-left py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Replay</th>
               </tr>
             </thead>
@@ -393,9 +391,6 @@ export function SessionsList() {
                         Connect Copilot SDK <code className="text-zinc-400">cliUrl</code> to{" "}
                         <code className="text-sky-400/80">http://127.0.0.1:4321</code>
                       </p>
-                      <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-                        <CopyBridgeUrl />
-                      </div>
                     </div>
                   </td>
                 </tr>

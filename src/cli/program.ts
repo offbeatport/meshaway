@@ -12,41 +12,33 @@ export function createProgram(): Command {
 
   program
     .name("meshaway")
-    .description("Meshaway — Bridge + Hub for agentic tools")
+    .description("Meshaway — Simple Bridge + Monitor Hub")
     .version(getPackageJsonVersion())
-    .option("--hub-listen <host:port>", "Hub listen address", DEFAULT_HUB_LISTEN)
-    .option("--hub <url>", "Connect bridge to Hub URL")
-    .option("--no-hub", "Standalone bridge (no hub)")
     .option("-v, --verbose", "Verbose logging")
     .option("--log-level <level>", "Log level", "info")
-    .option("--log-format <format>", "Log format: text or json", "text");
-
-  function showInfo(): void {
-    const version = getPackageJsonVersion();
-    process.stdout.write(chalk.bold("Meshaway") + ` v${version}\n\n`);
-    process.stdout.write("Bridge and Hub for agentic tools. Connects SDKs (e.g. GitHub Copilot, ACP)\n");
-    process.stdout.write("to backends (e.g. ACP providers, OpenAI-compatible APIs) via a local Hub.\n\n");
-    process.stdout.write("Usage:\n");
-    process.stdout.write("  meshaway hub       Start Hub (web UI, sessions, playground)\n");
-    process.stdout.write("  meshaway bridge    Start Bridge in stdio mode (for cliPath)\n");
-    process.stdout.write("  meshaway doctor    Run environment checks\n");
-    process.stdout.write("  meshaway status    Show runtime status\n\n");
-    process.stdout.write("Examples:\n");
-    process.stdout.write("  meshaway hub --listen 127.0.0.1:7337   # Hub on custom port\n");
-    process.stdout.write("  meshaway bridge --backend acp:gemini-cli # Bridge for Copilot/ACP\n\n");
-    process.stdout.write("  meshaway --help for options.  meshaway <command> --help for command help.\n");
-  }
-
-  program
-    .command("info", { isDefault: true, hidden: true })
-    .description("Show info and usage")
-    .action(showInfo);
+    .option("--log-format <format>", "Log format: text or json", "text")
+    .action(() => {
+      const version = getPackageJsonVersion();
+      process.stdout.write(chalk.bold("Meshaway") + ` v${version}\n\n`);
+      process.stdout.write("Bridge and Hub for agentic tools. Connects SDKs (e.g. GitHub Copilot SDK)\n");
+      process.stdout.write("to ACP provider backends (e.g. gemeni-cli, opencode etc.).\n\n");
+      process.stdout.write("Usage:\n");
+      process.stdout.write("  meshaway hub       Start Hub (monitor sessions, playground)\n");
+      process.stdout.write("  meshaway bridge    Start Bridge in stdio mode\n");
+      process.stdout.write("  meshaway doctor    Run environment checks\n");
+      process.stdout.write("  meshaway status    Show runtime status\n\n");
+      process.stdout.write("Examples:\n");
+      process.stdout.write("  meshaway hub --listen 127.0.0.1:7337   # Hub on custom port\n");
+      process.stdout.write("  meshaway bridge --agent acp:gemini-cli # Bridge for Copilot/ACP\n\n");
+      process.stdout.write("  meshaway --help for options.  meshaway <command> --help for command help.\n");
+    });
 
   program
     .command("hub")
     .description("Start Hub only")
     .option("--listen <host:port>", "Listen address", DEFAULT_HUB_LISTEN)
     .option("--port <port>", "Port (default 7337)")
+    .option("--no-open", "Do not open the browser automatically")
     .option("--log-level <level>", "Log level", "info")
     .action((opts: Record<string, string | boolean | undefined>) =>
       runHub(opts)
@@ -55,13 +47,13 @@ export function createProgram(): Command {
   program
     .command("bridge")
     .description("Start Bridge (stdio)")
-    .option("--hub <url>", "Connect to Hub")
-    .option("--no-hub", "Standalone bridge")
-    .option("--backend <specifier>", "Backend")
-    .option("-v, --verbose")
+    .allowUnknownOption(true)
+    .allowExcessArguments(true)
+    .option("--agent <specifier>", "Agent/backend specifier (e.g. acp:gemini-cli)")
+    .option("--agent-args <args...>", "Extra arguments for the agent")
     .option("--log-level <level>", "Log level", "info")
     .option("--log-format <format>", "Log format", "text")
-    .action((opts: Record<string, unknown>) => runBridge(opts));
+    .action((opts: Record<string, unknown>) => runBridge(opts))
 
   program
     .command("doctor")

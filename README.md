@@ -11,21 +11,21 @@ npx meshaway
 ```
 
 Then:
+
 - **Hub UI**: http://127.0.0.1:7337
 - **Bridge URL**: http://127.0.0.1:4321
-- **Copilot SDK**: set `cliUrl = http://127.0.0.1:4321`
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `meshaway` | Start Hub + Bridge (default) |
-| `meshaway hub` | Start Hub only |
-| `meshaway bridge` | Start Bridge only |
+| Command                             | Description                        |
+| ----------------------------------- | ---------------------------------- |
+| `meshaway`                          | Start Hub + Bridge (default)       |
+| `meshaway hub`                      | Start Hub only                     |
+| `meshaway bridge`                   | Start Bridge only                  |
 | `meshaway bridge --transport stdio` | Bridge in stdio mode (for cliPath) |
-| `meshaway bridge --no-hub` | Standalone bridge |
-| `meshaway doctor` | Environment checks |
-| `meshaway status` | Runtime status |
+| `meshaway bridge --no-hub`          | Standalone bridge                  |
+| `meshaway doctor`                   | Environment checks                 |
+| `meshaway status`                   | Runtime status                     |
 
 ## Environment
 
@@ -36,12 +36,12 @@ Then:
 
 ## Documentation
 
-| Doc | Description |
-| ----- | ----------- |
-| [docs/copilot.md](docs/copilot.md) | GitHub Copilot SDK integration |
-| [docs/acp.md](docs/acp.md) | ACP agent backends |
-| [docs/hub.md](docs/hub.md) | Hub API and UI |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | Common issues and fixes |
+| Doc                                                | Description                    |
+| -------------------------------------------------- | ------------------------------ |
+| [docs/copilot.md](docs/copilot.md)                 | GitHub Copilot SDK integration |
+| [docs/acp.md](docs/acp.md)                         | ACP agent backends             |
+| [docs/hub.md](docs/hub.md)                         | Hub API and UI                 |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Common issues and fixes        |
 
 ## Native binary
 

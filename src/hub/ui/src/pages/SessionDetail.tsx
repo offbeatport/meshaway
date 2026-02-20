@@ -5,40 +5,16 @@ import {
   FileJson,
   Copy,
   Check,
-  ChevronRight,
   Shield,
   Wrench,
-  MessageSquare,
-  Route,
-  XCircle,
   Download,
-  Clock,
 } from "lucide-react";
 import { useState, useCallback, useMemo } from "react";
-import { Checkbox } from "@base-ui/react/checkbox";
-import { Collapsible } from "@base-ui/react/collapsible";
 import { Tabs } from "@base-ui/react/tabs";
 import { useSession } from "@/lib/useApi";
-import { formatDateTime, formatTime, formatDuration, truncateId } from "@/lib/format";
+import { formatTime, formatDuration, truncateId } from "@/lib/format";
 import { getSessionExportUrl } from "@/lib/api";
 import type { Frame } from "@/lib/api";
-
-type EventKind = "model" | "user" | "approval" | "error" | "routing";
-const EVENT_COLORS: Record<EventKind, string> = {
-  model: "bg-teal-500",
-  user: "bg-sky-500",
-  approval: "bg-amber-500",
-  error: "bg-red-500",
-  routing: "bg-zinc-500",
-};
-
-function getEventKind(type: string): EventKind {
-  if (type.includes("prompt.result") || type.includes("openai.prompt")) return "model";
-  if (type.includes("request_permission")) return "approval";
-  if (type.includes("cancel") || type.includes("kill") || type.includes("error")) return "error";
-  if (type.includes("session/new") || type.includes("routing")) return "routing";
-  return "user";
-}
 
 function getFilterCategory(type: string): "messages" | "tools" | "routing" | "safety" | "errors" | null {
   if (type.includes("prompt") || type.includes("openai.prompt")) return "messages";
@@ -47,25 +23,6 @@ function getFilterCategory(type: string): "messages" | "tools" | "routing" | "sa
   if (type.includes("request_permission")) return "safety";
   if (type.includes("cancel") || type.includes("kill") || type.includes("error")) return "errors";
   return null;
-}
-
-function eventSummary(frame: Frame): string {
-  const type = frame.type;
-  const p = (frame.payload || {}) as Record<string, unknown>;
-  if (type === "copilot.prompt") {
-    const prompt = typeof p.prompt === "string" ? p.prompt : "";
-    return prompt.slice(0, 120) + (prompt.length > 120 ? "…" : "") || "User message";
-  }
-  if (type === "acp.session/new") return "Session started";
-  if (type === "acp.session/prompt") return "User / tool input";
-  if (type === "acp.session/prompt.result" || type === "openai.prompt.result") {
-    const text = (p.text ?? p.result ?? "") as string;
-    const len = typeof text === "string" ? text.length : 0;
-    return `Response${len ? ` (${len} chars)` : ""}`;
-  }
-  if (type === "acp.session/request_permission") return "Waiting for approval";
-  if (type === "acp.session/cancel") return "Cancel / kill";
-  return type;
 }
 
 function extractToolCalls(frames: Frame[]): Array<{ id: string; command?: string; status?: string; result?: unknown; timestamp: number }> {
@@ -167,80 +124,21 @@ function KillButton({
   );
 }
 
-function TimelineEventCard({ frame }: { frame: Frame }) {
-  const [open, setOpen] = useState(false);
-  const [jsonOpen, setJsonOpen] = useState(false);
-  const kind = getEventKind(frame.type);
-  const summary = eventSummary(frame);
-  const json = JSON.stringify(frame.payload, null, 2);
-
-  const Icon =
-    kind === "model"
-      ? MessageSquare
-      : kind === "user"
-        ? MessageSquare
-        : kind === "approval"
-          ? Shield
-          : kind === "error"
-            ? XCircle
-            : Route;
-
-  return (
-    <div className="flex gap-0 rounded-lg border border-zinc-700 dark:border-zinc-800 bg-zinc-800/30 dark:bg-zinc-900/40 overflow-hidden">
-      <div className={`w-1 flex-shrink-0 ${EVENT_COLORS[kind]}`} />
-      <div className="flex flex-col items-center w-20 flex-shrink-0 py-2 border-r border-zinc-700 dark:border-zinc-800">
-        <span className="text-xs text-zinc-500 dark:text-zinc-500 font-mono">
-          {formatTime(frame.timestamp)}
-        </span>
-        <Icon className="h-4 w-4 mt-1 text-zinc-400 dark:text-zinc-500" />
-      </div>
-      <Collapsible.Root open={open} onOpenChange={setOpen} className="flex-1 min-w-0">
-        <Collapsible.Trigger className="flex w-full items-start justify-between gap-4 p-3 text-left hover:bg-zinc-800/50 dark:hover:bg-zinc-800/30 cursor-pointer">
-          <p className="text-sm text-zinc-200 dark:text-zinc-200 truncate flex-1">{summary}</p>
-          <ChevronRight
-            className={`h-4 w-4 text-zinc-500 flex-shrink-0 ${open ? "rotate-90" : ""}`}
-          />
-        </Collapsible.Trigger>
-        <Collapsible.Panel>
-          <div className="border-t border-zinc-700 dark:border-zinc-800 px-3 py-2 space-y-2 bg-zinc-900/30 dark:bg-zinc-950/50">
-            {typeof frame.payload === "object" && frame.payload && (
-              <pre className="font-mono text-xs text-zinc-400 dark:text-zinc-500 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
-                {JSON.stringify(frame.payload, null, 2)}
-              </pre>
-            )}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setJsonOpen((o) => !o); }}
-              className="text-xs text-zinc-500 dark:text-zinc-500 hover:text-zinc-300 dark:hover:text-zinc-300"
-            >
-              {jsonOpen ? "Hide" : "Show"} raw JSON
-            </button>
-            {jsonOpen && (
-              <pre className="font-mono text-xs text-zinc-500 dark:text-zinc-600 overflow-x-auto whitespace-pre-wrap break-words">
-                {json}
-              </pre>
-            )}
-          </div>
-        </Collapsible.Panel>
-      </Collapsible.Root>
-    </div>
-  );
-}
-
-function FrameCard({
-  type,
+/** Terminal-style log line: datetime [Bridge.stderr] (dimmed) + pretty-printed JSON */
+function ConsoleFrameLine({
   timestamp,
+  type,
   payload,
   redacted,
 }: {
-  type: string;
   timestamp: number;
+  type: string;
   payload: unknown;
   redacted?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const json = JSON.stringify(payload, null, 2);
+  const datetime = new Date(timestamp).toISOString();
+  const json = JSON.stringify({ type, payload }, null, 2);
 
   const handleCopy = useCallback(
     async (e: React.MouseEvent) => {
@@ -253,39 +151,27 @@ function FrameCard({
   );
 
   return (
-    <Collapsible.Root open={open} onOpenChange={setOpen} className="rounded-lg border border-zinc-800 bg-zinc-900/40 overflow-hidden">
-      <Collapsible.Trigger className="flex w-full items-center justify-between gap-4 p-4 text-left hover:bg-zinc-800/30 cursor-pointer">
-        <div className="flex items-center gap-3 min-w-0">
-          <ChevronRight
-            className={`h-4 w-4 text-zinc-500 flex-shrink-0 ${open ? "rotate-90" : ""}`}
-          />
-          <span className="font-mono text-sm text-sky-400">{type}</span>
-          <span className="text-xs text-zinc-500">
-            {formatTime(timestamp)}
-            {redacted && (
-              <span className="ml-2 inline-flex items-center gap-1 text-amber-400/80">
-                <Shield className="h-3 w-3" />
-                redacted
-              </span>
-            )}
-          </span>
-        </div>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-2 px-2 py-1 rounded text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 flex-shrink-0"
-        >
-          {copied ? <Check className="h-3.5 w-3.5 text-sky-400" /> : <Copy className="h-3.5 w-3.5" />}
-          {copied ? "Copied" : "Copy"}
-        </button>
-      </Collapsible.Trigger>
-      <Collapsible.Panel>
-        <div className="border-t border-zinc-800 px-4 py-3 bg-zinc-950/50">
-          <pre className="font-mono text-xs text-zinc-400 overflow-x-auto whitespace-pre-wrap break-words">
-            {json}
-          </pre>
-        </div>
-      </Collapsible.Panel>
-    </Collapsible.Root>
+    <div className="flex items-start gap-2 border-b border-zinc-800/80 px-3 py-1.5 last:border-b-0 hover:bg-zinc-800/20 group font-mono text-xs">
+      <span className="text-zinc-500 shrink-0 select-none">
+        {datetime}
+      </span>
+      <pre className="text-[11px] text-zinc-400 overflow-x-auto whitespace-pre-wrap break-words flex-1 min-w-0">
+        {json}
+      </pre>
+      {redacted && (
+        <span className="shrink-0 inline-flex items-center gap-1 text-amber-400/80 text-[10px]">
+          <Shield className="h-3 w-3" />
+          redacted
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="text-zinc-500 hover:text-sky-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-sky-400" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </div>
   );
 }
 
@@ -294,7 +180,6 @@ export function SessionDetail() {
   const navigate = useNavigate();
   const { session, frames, loading, error, killSession } = useSession(id);
   const [timelineFilter, setTimelineFilter] = useState<"all" | "messages" | "tools" | "routing" | "safety" | "errors">("all");
-  const [rawFrames, setRawFrames] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
   const filteredFrames = useMemo(() => {
@@ -368,21 +253,14 @@ export function SessionDetail() {
         </button>
       </div>
 
-      <Tabs.Root defaultValue="timeline" className="space-y-0">
+      <Tabs.Root defaultValue="console" className="space-y-0">
         <Tabs.List className="flex gap-2 border-b border-zinc-800 pb-2 mb-4">
           <Tabs.Tab
-            value="timeline"
-            className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 data-[selected]:bg-zinc-800 data-[selected]:text-zinc-100"
-          >
-            <Clock className="h-4 w-4 inline mr-2" />
-            Timeline
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="frames"
+            value="console"
             className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 data-[selected]:bg-zinc-800 data-[selected]:text-zinc-100"
           >
             <FileJson className="h-4 w-4 inline mr-2" />
-            Frames ({frames.length})
+            Console ({frames.length})
           </Tabs.Tab>
           <Tabs.Tab
             value="tools"
@@ -393,10 +271,9 @@ export function SessionDetail() {
           </Tabs.Tab>
         </Tabs.List>
 
-        <Tabs.Panel value="timeline" className="space-y-4">
+        <Tabs.Panel value="console" className="space-y-4">
           {/* Sticky header */}
           <div className="sticky top-0 z-10 -mx-6 px-6 py-4 bg-zinc-950 dark:bg-zinc-950 border-b border-zinc-800 space-y-3">
-            {/* Row 1: session id + meta (left), status (right) */}
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <code className="font-mono text-sm text-zinc-200 dark:text-zinc-200">{truncateId(session.id, 24)}</code>
@@ -406,19 +283,17 @@ export function SessionDetail() {
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">{tokens} chars</span>
               </div>
               <span
-                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium shrink-0 ${
-                  session.status === "active"
+                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium shrink-0 ${session.status === "active"
                     ? "bg-sky-500/15 text-sky-400 border border-sky-500/30"
                     : session.status === "killed"
                       ? "bg-red-500/15 text-red-400 border border-red-500/30"
                       : "bg-zinc-500/15 text-zinc-400 border border-zinc-500/30"
-                }`}
+                  }`}
               >
                 {session.status === "active" && <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />}
                 {session.status}
               </span>
             </div>
-            {/* Row 2: filters (left), actions (right) */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-medium text-zinc-500 dark:text-zinc-500 uppercase tracking-wider">Filters</span>
@@ -427,11 +302,10 @@ export function SessionDetail() {
                     key={value}
                     type="button"
                     onClick={() => setTimelineFilter(value)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium ${
-                      timelineFilter === value
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium ${timelineFilter === value
                         ? "bg-zinc-700 dark:bg-zinc-700 text-zinc-100 dark:text-zinc-100"
                         : "bg-zinc-800/50 dark:bg-zinc-800/50 text-zinc-400 dark:text-zinc-400 hover:text-zinc-200 dark:hover:text-zinc-200"
-                    }`}
+                      }`}
                   >
                     {value === "all" ? "All" : value.charAt(0).toUpperCase() + value.slice(1)}
                   </button>
@@ -457,71 +331,30 @@ export function SessionDetail() {
                 </button>
               </div>
             </div>
-            <label className="flex items-center gap-2 text-sm text-zinc-400 dark:text-zinc-500 cursor-pointer">
-              <Checkbox.Root
-                checked={rawFrames}
-                onCheckedChange={(checked) => setRawFrames(!!checked)}
-                className="size-4 rounded border border-zinc-600 bg-zinc-800 data-[checked]:bg-sky-500 data-[checked]:border-sky-500 flex items-center justify-center"
-              >
-                <Checkbox.Indicator className="text-white">
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="2,6 5,9 10,3" />
-                  </svg>
-                </Checkbox.Indicator>
-              </Checkbox.Root>
-              Raw frames
-            </label>
           </div>
 
-          {/* Timeline body */}
-          <div className="space-y-2 pt-2">
+          {/* Console: terminal-style frames */}
+          <div className="rounded border border-zinc-800 bg-zinc-950 font-mono text-xs text-zinc-300">
             {filteredFrames.length === 0 ? (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-12 text-center">
-                <Clock className="h-12 w-12 text-zinc-600 mx-auto mb-3" />
-                <p className="text-zinc-500">No events</p>
-                <p className="mt-1 text-sm text-zinc-600">Events will appear as the session runs</p>
+              <div className="p-12 text-center text-zinc-500">
+                <FileJson className="h-12 w-12 text-zinc-600 mx-auto mb-3" />
+                <p>No log entries</p>
+                <p className="mt-1 text-zinc-600">Frames will appear as the session runs</p>
               </div>
-            ) : rawFrames ? (
-              <div className="space-y-2">
+            ) : (
+              <div>
                 {filteredFrames.map((f) => (
-                  <FrameCard
+                  <ConsoleFrameLine
                     key={f.id}
-                    type={f.type}
                     timestamp={f.timestamp}
+                    type={f.type}
                     payload={f.payload}
                     redacted={f.redacted}
                   />
                 ))}
               </div>
-            ) : (
-              <div className="space-y-2">
-                {filteredFrames.map((f) => (
-                  <TimelineEventCard key={f.id} frame={f} />
-                ))}
-              </div>
             )}
           </div>
-        </Tabs.Panel>
-
-        <Tabs.Panel value="frames" className="space-y-2">
-          {frames.length === 0 ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-12 text-center">
-              <FileJson className="h-12 w-12 text-zinc-600 mx-auto mb-3" />
-              <p className="text-zinc-500">No frames recorded</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {frames.map((f) => (
-                <FrameCard
-                  key={f.id}
-                  type={f.type}
-                  timestamp={f.timestamp}
-                  payload={f.payload}
-                  redacted={f.redacted}
-                />
-              ))}
-            </div>
-          )}
         </Tabs.Panel>
 
         <Tabs.Panel value="tools" className="space-y-2">

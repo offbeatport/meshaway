@@ -10,6 +10,11 @@ import { runnerStore } from "./store/runner.js";
 import { getDefaultBackend } from "./governance/policy.js";
 import { markKilled } from "../bridge/interceptors/killswitch.js";
 import { EMBEDDED_UI } from "./embedded-ui.generated.js";
+import type { CopilotSession } from "@github/copilot-sdk";
+import { createCopilotRunner } from "./playground/runner-copilot.js";
+
+/** Active runners: runnerSessionId -> Copilot session + stop. */
+const activeRunners = new Map<string, { session: CopilotSession; stop: () => Promise<void> }>();
 
 function findUiDir(): string | null {
   const abs = join(process.cwd(), "dist", "ui");
@@ -119,6 +124,10 @@ export function createHubApp(): Hono {
     if (ok) markKilled(id);
     return c.json({ ok });
   });
+
+
+  // Playground API
+
   app.post("/api/playground/send", async (c) => {
     let body: {
       clientType?: string;
@@ -136,50 +145,35 @@ export function createHubApp(): Hono {
       return c.json({ error: "Invalid JSON" }, 400);
     }
     const prompt = typeof body.prompt === "string" ? body.prompt : "";
-    const clientType = body.clientType === "acp" ? "acp" : "copilot";
     const runnerSessionId = typeof body.runnerSessionId === "string" && body.runnerSessionId
       ? body.runnerSessionId
-      : genId("runner");
+      : null;
 
-    const runnerSession = runnerStore.createOrGet(runnerSessionId);
-    const agentCommand = typeof body.agentCommand === "string" ? body.agentCommand : runnerSession.agentCommand ?? "meshaway";
-    const agentArgs = Array.isArray(body.agentArgs) && body.agentArgs.length > 0
-      ? body.agentArgs
-      : (runnerSession.agentArgs && runnerSession.agentArgs.length > 0 ? runnerSession.agentArgs : ["bridge", "--backend", "acp:gemini-cli"]);
-    runnerStore.update(runnerSessionId, { status: "streaming" });
-    const hubBase = process.env.MESH_HUB_URL ?? `http://127.0.0.1:${process.env.PORT ?? 7337}`;
-    let bridgeCommand: { cmd: string; args: string[] } = { cmd: "node", args: [] };
-    try {
-      const { spawnPlaygroundRunnerStdio, resolveBridgeCommand } = await import("./playground/runner-stdio.js");
-      bridgeCommand = resolveBridgeCommand(agentCommand, agentArgs);
-      const child = spawnPlaygroundRunnerStdio({
-        runnerSessionId,
-        hubUrl: hubBase,
-        clientType,
-        prompt,
-        agentCommand,
-        agentArgs,
-        record: body.record === true,
-        recordFilename: typeof body.recordFilename === "string" ? body.recordFilename : undefined,
-      });
-      runnerStore.update(runnerSessionId, { runnerPid: child.pid });
-      child.on("exit", () => {
-        runnerStore.update(runnerSessionId, { runnerPid: undefined });
-      });
-    } catch (err) {
-      runnerStore.update(runnerSessionId, { status: "error" });
+    if (!runnerSessionId) {
+      return c.json({
+        error: "runnerSessionId required. Create a session with POST /api/playground/session first.",
+      }, 400);
+    }
+
+    const active = activeRunners.get(runnerSessionId);
+    const runnerSession = runnerStore.get(runnerSessionId);
+
+    if (!active || !runnerSession) {
       return c.json({
         runnerSessionId,
         status: "error",
-        error: err instanceof Error ? err.message : "Failed to start runner",
+        error: "Session not found or agent not running. Create a session with POST /api/playground/session first.",
       }, 502);
     }
+
+    runnerStore.update(runnerSessionId, { status: "streaming" });
+
+    await active.session.send({ prompt });
+
     return c.json({
       runnerSessionId,
-      status: "streaming",
-      bridgeType: "stdio",
-      agentExec: bridgeCommand.cmd,
-      agentArgs: bridgeCommand.args,
+      status: "streaming"
+
     });
   });
 
@@ -194,73 +188,95 @@ export function createHubApp(): Hono {
     return c.json({ frames: runnerSession.frames });
   });
 
+  const defaultCliArgs = ["bridge", "--agent", "acp:gemini-cli"];
+
   app.post("/api/playground/session", async (c) => {
-    let body: { clientType?: string; agentCommand?: string; agentArgs?: string[] };
+
+    let body: { cliPath?: string; cliArgs?: string[]; };
     try {
       body = (await c.req.json().catch(() => ({}))) as typeof body;
     } catch {
       return c.json({ error: "Invalid JSON" }, 400);
     }
+
+    const cliPath = typeof body.cliPath === "string" && body.cliPath ? body.cliPath : "meshaway";
+    const cliArgs = Array.isArray(body.cliArgs) && body.cliArgs.length > 0 ? body.cliArgs : defaultCliArgs;
+
     const runnerSessionId = genId("runner");
     runnerStore.createOrGet(runnerSessionId);
-    const agentCommand = typeof body.agentCommand === "string" ? body.agentCommand : "meshaway";
-    const agentArgs = Array.isArray(body.agentArgs) ? body.agentArgs : [];
-    runnerStore.update(runnerSessionId, { agentCommand, agentArgs });
-    let agentExec: string | null = null;
-    let resolvedAgentArgs: string[] = [];
+    runnerStore.update(runnerSessionId, { agentCommand: cliPath, agentArgs: cliArgs, status: "connected" });
+
+    const addFrame = (type: string, payload: unknown) => {
+      runnerStore.addFrame(runnerSessionId, type, payload);
+    };
+
     try {
-      const { resolveBridgeCommand } = await import("./playground/runner-stdio.js");
-      const bridgeCommand = resolveBridgeCommand(agentCommand, agentArgs.length ? agentArgs : ["bridge", "--backend", "acp:gemini-cli"]);
-      agentExec = bridgeCommand.cmd;
-      resolvedAgentArgs = bridgeCommand.args;
-    } catch {
-      // Metadata-only; keep session creation successful.
+
+      const { session, stop } = await createCopilotRunner({
+        runnerSessionId,
+        addFrame,
+        cliPath,
+        cliArgs
+      });
+      activeRunners.set(runnerSessionId, { session, stop });
+
+      return c.json({
+        runnerSessionId,
+        bridgeType: "stdio"
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to start agent";
+      runnerStore.update(runnerSessionId, { status: "error" });
+      runnerStore.addFrame(runnerSessionId, "session.error", { message });
+      return c.json({ error: message, runnerSessionId }, 502);
     }
-    return c.json({
-      runnerSessionId,
-      bridgeType: "stdio",
-      agentExec,
-      agentArgs: resolvedAgentArgs,
-    });
+  });
+
+  async function disconnectRunner(runnerSessionId: string): Promise<void> {
+    const active = activeRunners.get(runnerSessionId);
+    if (!active) return;
+    await active.stop();
+    activeRunners.delete(runnerSessionId);
+    runnerStore.update(runnerSessionId, { runnerPid: undefined });
+    runnerStore.reset(runnerSessionId);
+  }
+
+  app.post("/api/playground/disconnect", async (c) => {
+    let body: { runnerSessionId?: string };
+    try {
+      body = (await c.req.json().catch(() => ({}))) as typeof body;
+    } catch {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const runnerSessionId = typeof body.runnerSessionId === "string" ? body.runnerSessionId : null;
+    if (!runnerSessionId) return c.json({ error: "runnerSessionId required" }, 400);
+    await disconnectRunner(runnerSessionId);
+    return c.json({ ok: true });
   });
 
   app.post("/api/playground/control", async (c) => {
     let body: { runnerSessionId?: string; action?: string };
     try {
-      body = (await c.req.json()) as typeof body;
+      body = (await c.req.json().catch(() => ({}))) as typeof body;
     } catch {
       return c.json({ error: "Invalid JSON" }, 400);
     }
-    const runnerSessionId = typeof body.runnerSessionId === "string" ? body.runnerSessionId : "";
-    const action = body.action === "kill" ? "kill" : body.action === "reset" ? "reset" : body.action === "cancel" ? "cancel" : undefined;
-    if (!runnerSessionId || !action) {
-      return c.json({ error: "runnerSessionId and action (cancel|kill|reset) required" }, 400);
+    const runnerSessionId = typeof body.runnerSessionId === "string" ? body.runnerSessionId : null;
+    const action = typeof body.action === "string" ? body.action : "";
+    if (!runnerSessionId) return c.json({ error: "runnerSessionId required" }, 400);
+    if (action === "reset" || action === "disconnect") {
+      await disconnectRunner(runnerSessionId);
+      return c.json({ ok: true, action });
     }
-    const runnerSession = runnerStore.get(runnerSessionId);
-    if (!runnerSession) return c.json({ error: "Runner session not found" }, 404);
-    if (action === "reset") {
-      if (runnerSession.runnerPid) {
-        try {
-          process.kill(runnerSession.runnerPid, "SIGTERM");
-        } catch {
-          // ignore
-        }
-      }
-      runnerStore.reset(runnerSessionId);
-      return c.json({ ok: true, action: "reset" });
-    }
-    if (action === "kill" && runnerSession.bridgeSessionId) {
-      const ok = sessionStore.killSession(runnerSession.bridgeSessionId);
-      if (ok) markKilled(runnerSession.bridgeSessionId);
-      runnerStore.update(runnerSessionId, { status: "error" });
+    if (action === "kill") {
+      markKilled(runnerSessionId);
+      await disconnectRunner(runnerSessionId);
       return c.json({ ok: true, action: "kill" });
     }
-    if (action === "cancel") {
-      runnerStore.update(runnerSessionId, { status: "connected" });
-      return c.json({ ok: true, action: "cancel" });
-    }
-    return c.json({ error: "Invalid action" }, 400);
+    return c.json({ error: "Unknown action" }, 400);
   });
+
+
 
   app.post("/api/playground/runner/:runnerSessionId/frames", async (c) => {
     const runnerSessionId = c.req.param("runnerSessionId");

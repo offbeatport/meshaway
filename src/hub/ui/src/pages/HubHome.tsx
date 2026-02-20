@@ -10,7 +10,6 @@ import {
 import { useSessions, useHealth } from "@/lib/useApi";
 import { formatRelativeTime, truncateId } from "@/lib/format";
 import { SkeletonCard } from "@/components/SkeletonCard";
-import { CopyBridgeUrl } from "@/components/CopyBridgeUrl";
 
 
 function StatusBadge({ status }: { status: string }) {
@@ -128,11 +127,10 @@ export function HubHome() {
               </h3>
               <p className="mt-3 text-sm text-zinc-500 max-w-sm mx-auto text-left">
                 <span className="block mb-2">Get started in 3 steps:</span>
-                <span className="block">1. Run <code className="text-zinc-400">npx meshaway</code></span>
-                <span className="block">2. Set Copilot <code className="text-zinc-400">cliUrl = http://127.0.0.1:4321</code></span>
-                <span className="block">3. Start a task — session appears here</span>
+                <span className="block">1. Run <code className="text-zinc-400">meshaway hub</code> (this Hub)</span>
+                <span className="block mt-2">2. Connect via stdio: set Copilot SDK <code className="text-zinc-400">cliPath</code> to the meshaway binary and <code className="text-zinc-400">cliArgs</code> to <code className="text-zinc-400">["bridge", "--agent", "acp:gemini-cli"]</code> (or another ACP backend)</span>
+                <span className="block mt-2">3. Start a task — session appears here</span>
               </p>
-              <CopyBridgeUrl className="mt-4" />
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
@@ -154,7 +152,6 @@ export function HubHome() {
             <h3 className="text-sm font-medium text-zinc-300 mb-2">
               Quick connect
             </h3>
-            <CopyBridgeUrl className="mt-0" />
             <a
               href={typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:7337"}
               target="_blank"

@@ -25,7 +25,8 @@ type BridgeResponse =
   | { jsonrpc: "2.0"; id: JsonRpcId | null; error: { code: number; message: string; data?: unknown } };
 
 export interface BridgeEngineOptions {
-  backend?: string;
+  agent?: string;
+  agentArgs?: string[];
   hubUrl?: string;
 }
 
@@ -54,8 +55,19 @@ class AcpRpcClient {
     { resolve: (value: unknown) => void; reject: (err: Error) => void; timer: NodeJS.Timeout }
   >();
 
-  constructor(commandSpec: string) {
-    const { command, args } = parseCommand(commandSpec);
+  constructor(commandSpec: string, extraArgs: string[] = []) {
+    let { command, args } = parseCommand(commandSpec);
+    if (
+      command &&
+      command !== "npx" &&
+      !command.includes("/") &&
+      !command.includes("\\") &&
+      args.length === 0
+    ) {
+      command = "npx";
+      args = [commandSpec.trim()];
+    }
+    args = [...args, ...extraArgs];
     this.adapter = createAcpStdioAdapter(command, args);
     this.adapter.onLine((line) => this.onLine(line));
   }
@@ -122,11 +134,15 @@ export class BridgeEngine {
   private hubLink: HubLinkClient | null = null;
 
   constructor(private readonly options: BridgeEngineOptions) {
-    this.backendSpec = this.options.backend
-      ? parseBackendSpec(this.options.backend)
+    this.backendSpec = this.options.agent
+      ? parseBackendSpec(this.options.agent)
       : null;
     if (this.backendSpec?.type === "acp") {
-      this.acpClient = new AcpRpcClient(this.backendSpec.value);
+      let value = this.backendSpec.value.trim();
+      if (value === "gemini-cli") value = "@google/gemini-cli";
+      const isPath = value.startsWith("/") || value.startsWith(".") || value.includes("\\");
+      const commandSpec = value && !value.includes(" ") && !isPath ? `npx ${value}` : value;
+      this.acpClient = new AcpRpcClient(commandSpec, this.options.agentArgs ?? []);
     }
     if (typeof this.options.hubUrl === "string" && this.options.hubUrl) {
       this.hubLink = createHubLinkClient(this.options.hubUrl);

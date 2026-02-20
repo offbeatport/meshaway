@@ -10,6 +10,7 @@ export async function runBridge(
     String((opts.logFormat as string) || "text")
   );
 
-  const backend = (opts.backend as string) || getEnv("BACKEND");
-  runStdioBridge(backend ?? undefined);
+  // When starting in bridge mode, ignore all CLI arguments/commands; use only env.
+  const agent = getEnv("AGENT") || getEnv("BACKEND");
+  runStdioBridge(agent || undefined, undefined);
 }
