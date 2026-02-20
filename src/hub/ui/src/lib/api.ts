@@ -56,7 +56,6 @@ export async function checkHealth(): Promise<boolean> {
 export interface HealthInfo {
   hub: boolean;
   backend: string;
-  bridgeUrl: string;
 }
 
 export async function fetchHealthInfo(): Promise<HealthInfo> {
@@ -65,62 +64,9 @@ export async function fetchHealthInfo(): Promise<HealthInfo> {
   return res.json();
 }
 
-export interface PendingApproval {
-  key: string;
-  sessionId: string;
-  toolCallId: string;
-  command?: string;
-}
-
-export async function fetchApprovals(): Promise<PendingApproval[]> {
-  const res = await fetch(`${API_BASE}/approvals`);
-  if (!res.ok) throw new Error(`Failed to fetch approvals: ${res.status}`);
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
-}
-
-export async function resolveApproval(
-  sessionId: string,
-  toolCallId: string,
-  decision: "approve" | "deny"
-): Promise<boolean> {
-  const res = await fetch(`${API_BASE}/admin/approve/${sessionId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ toolCallId, decision }),
-  });
-  const data = await res.json();
-  return data?.ok === true;
-}
-
-export interface RoutingRule {
-  backend: string;
-}
-
-export async function fetchRoutingRules(): Promise<RoutingRule[]> {
-  const res = await fetch(`${API_BASE}/routing/rules`);
-  if (!res.ok) throw new Error(`Failed to fetch routing: ${res.status}`);
-  const data = await res.json();
-  return Array.isArray(data?.rules) ? data.rules : [];
-}
-
-export async function setRoutingBackend(backend: string): Promise<boolean> {
-  const res = await fetch(`${API_BASE}/routing/rules`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ backend }),
-  });
-  const data = await res.json();
-  return data?.ok === true;
-}
-
 export interface PlaygroundSendParams {
   prompt: string;
   sessionId?: string;
-  bridgeUrl?: string;
-  faultLatency?: number;
-  faultDrop?: boolean;
-  faultError?: string;
 }
 
 export interface PlaygroundSendResult {
@@ -130,22 +76,17 @@ export interface PlaygroundSendResult {
   error?: { code: number; message: string; data?: unknown };
 }
 
-/** Runner-based playground send (server-side Runner; TCP or STDIO to Bridge). */
+/** Runner-based playground send (server-side Runner; stdio Bridge). */
 export interface PlaygroundRunnerSendParams {
   clientType: "copilot" | "acp";
-  transport: "tcp" | "stdio";
-  bridgeTarget?: string;
   /** Agent command (e.g. "meshaway"). */
   agentCommand?: string;
-  /** Agent args (e.g. ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]). */
+  /** Agent args (e.g. ["bridge", "--backend", "acp:gemini-cli"]). */
   agentArgs?: string[];
   prompt: string;
   runnerSessionId?: string;
   record?: boolean;
   recordFilename?: string;
-  faultLatency?: number;
-  faultDrop?: boolean;
-  faultError?: string;
 }
 
 export interface PlaygroundRunnerSendResult {
@@ -153,8 +94,7 @@ export interface PlaygroundRunnerSendResult {
   status: "idle" | "connected" | "streaming" | "error";
   sessionId?: string;
   error?: string;
-  bridgeType?: "tcp" | "stdio";
-  bridgeTarget?: string;
+  bridgeType?: "stdio";
   agentExec?: string | null;
   agentArgs?: string[];
 }
@@ -196,8 +136,7 @@ export async function createPlaygroundSession(
   });
   const data = (await res.json()) as {
     runnerSessionId?: string;
-    bridgeType?: "tcp" | "stdio";
-    bridgeTarget?: string;
+    bridgeType?: "stdio";
     agentExec?: string | null;
     agentArgs?: string[];
     error?: string;
@@ -207,7 +146,6 @@ export async function createPlaygroundSession(
   return {
     runnerSessionId: data.runnerSessionId,
     bridgeType: data.bridgeType,
-    bridgeTarget: data.bridgeTarget,
     agentExec: data.agentExec,
     agentArgs: Array.isArray(data.agentArgs) ? data.agentArgs : [],
   };
@@ -247,48 +185,6 @@ export async function sendPlaygroundPrompt(
   return data;
 }
 
-export interface PlaygroundRpcParams {
-  method: string;
-  params?: unknown;
-  id?: number;
-  bridgeUrl?: string;
-  faultLatency?: number;
-  faultDrop?: boolean;
-  faultError?: string;
-}
-
-export async function sendPlaygroundRpc(
-  params: PlaygroundRpcParams
-): Promise<Record<string, unknown>> {
-  const res = await fetch(`${API_BASE}/playground/rpc`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message ?? `Request failed: ${res.status}`);
-  return data;
-}
-
 export function getSessionExportUrl(sessionId: string): string {
   return `${API_BASE}/sessions/${sessionId}/export`;
-}
-
-export interface ReplayEntry {
-  method: string;
-  params?: unknown;
-}
-
-export async function replayPlayground(
-  entries: ReplayEntry[],
-  bridgeUrl?: string
-): Promise<{ results: unknown[] }> {
-  const res = await fetch(`${API_BASE}/playground/replay`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ entries, bridgeUrl }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error ?? `Replay failed: ${res.status}`);
-  return data;
 }

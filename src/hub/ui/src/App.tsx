@@ -3,9 +3,6 @@ import { Layout } from "./components/Layout";
 import { HubHome } from "./pages/HubHome";
 import { SessionsList } from "./pages/SessionsList";
 import { SessionDetail } from "./pages/SessionDetail";
-import { Approvals } from "./pages/Approvals";
-import { Routing } from "./pages/Routing";
-import { System } from "./pages/System";
 import { Playground } from "./pages/Playground";
 
 const router = createBrowserRouter([
@@ -16,9 +13,6 @@ const router = createBrowserRouter([
       { index: true, element: <HubHome /> },
       { path: "sessions", element: <SessionsList /> },
       { path: "sessions/:id", element: <SessionDetail /> },
-      { path: "approvals", element: <Approvals /> },
-      { path: "routing", element: <Routing /> },
-      { path: "system", element: <System /> },
       { path: "playground", element: <Playground /> },
     ],
   },

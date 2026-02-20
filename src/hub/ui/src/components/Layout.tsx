@@ -4,11 +4,6 @@ import {
   Cpu,
   Home,
   Activity,
-  Wifi,
-  WifiOff,
-  ShieldCheck,
-  Route,
-  Stethoscope,
   Play,
   ChevronLeft,
   ChevronRight,
@@ -17,7 +12,6 @@ import {
   Moon,
   Monitor,
 } from "lucide-react";
-import { useHealth } from "@/lib/useApi";
 import {
   getStoredAppearance,
   setStoredAppearance,
@@ -30,13 +24,9 @@ const navItems = [
   { to: "/", label: "Home", icon: Home },
   { to: "/sessions", label: "Sessions", icon: Activity },
   { to: "/playground", label: "Playground", icon: Play },
-  { to: "/approvals", label: "Approvals", icon: ShieldCheck },
-  { to: "/routing", label: "Routing", icon: Route },
-  { to: "/system", label: "Health", icon: Stethoscope },
 ];
 
 export function Layout() {
-  const healthy = useHealth();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [appearance, setAppearanceState] = useState<Appearance>(() => getStoredAppearance());
@@ -145,29 +135,6 @@ export function Layout() {
             );
           })}
         </nav>
-
-        {/* Status (Live) */}
-        <div
-          className={`flex items-center gap-2 text-xs dark:border-zinc-800/80 ${healthy === true
-            ? "text-sky-600 dark:text-sky-400/90"
-            : healthy === false
-              ? "text-amber-600 dark:text-amber-400/90"
-              : "text-zinc-500 dark:text-zinc-500"
-            } ${collapsed ? "justify-center p-2.5" : "px-3 py-2.5"}`}
-          title={healthy === true ? "Connected" : "Disconnected"}
-          aria-live="polite"
-        >
-          {healthy === true ? (
-            <Wifi className="h-4 w-4 flex-shrink-0" aria-hidden />
-          ) : (
-            <WifiOff className="h-4 w-4 flex-shrink-0" aria-hidden />
-          )}
-          {!collapsed && (
-            <span className="font-mono truncate">
-              {healthy === true ? "Live" : healthy === false ? "Offline" : "…"}
-            </span>
-          )}
-        </div>
 
         {/* Settings at bottom; menu hovers above */}
         <div className="relative border-t border-zinc-200 dark:border-zinc-800/80 m-2 pt-2" ref={settingsRef}>

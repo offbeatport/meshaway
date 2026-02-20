@@ -271,9 +271,8 @@ export function SessionsList() {
                     <button
                       type="button"
                       onClick={() => toggleSort(key)}
-                      className={`flex-1 text-left px-3 py-2 text-sm rounded-none first:rounded-t-lg last:rounded-b-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
-                        sortKey === key ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
-                      }`}
+                      className={`flex-1 text-left px-3 py-2 text-sm rounded-none first:rounded-t-lg last:rounded-b-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 ${sortKey === key ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
+                        }`}
                     >
                       {sortLabels[key]}
                     </button>
@@ -318,9 +317,8 @@ export function SessionsList() {
                     key={value}
                     type="button"
                     onClick={() => { setStatusFilter(value); setFilterMenuOpen(false); }}
-                    className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
-                      statusFilter === value ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
-                    }`}
+                    className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 ${statusFilter === value ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
+                      }`}
                   >
                     {value === "all" ? "All status" : value.charAt(0).toUpperCase() + value.slice(1)}
                   </button>
@@ -333,9 +331,8 @@ export function SessionsList() {
                     <button
                       type="button"
                       onClick={() => { setBackendFilter("all"); setFilterMenuOpen(false); }}
-                      className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
-                        backendFilter === "all" ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
-                      }`}
+                      className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 ${backendFilter === "all" ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
+                        }`}
                     >
                       All backends
                     </button>
@@ -344,9 +341,8 @@ export function SessionsList() {
                         key={b}
                         type="button"
                         onClick={() => { setBackendFilter(b); setFilterMenuOpen(false); }}
-                        className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 truncate ${
-                          backendFilter === b ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
-                        }`}
+                        className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 truncate ${backendFilter === b ? "text-sky-600 dark:text-sky-400 font-medium" : "text-zinc-700 dark:text-zinc-300"
+                          }`}
                       >
                         {b}
                       </button>

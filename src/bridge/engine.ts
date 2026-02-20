@@ -1,5 +1,4 @@
 import { createAcpStdioAdapter, type AcpStdioAdapter } from "../adapters/acp/stdio.js";
-import { streamChatCompletions } from "../adapters/openai_compat/http.js";
 import { parseBackendSpec } from "./router.js";
 import { genId } from "../shared/ids.js";
 import { getLogger } from "../shared/logging.js";
@@ -14,7 +13,6 @@ import {
 } from "../protocols/acp/types.js";
 import { CopilotPromptParamsSchema } from "../protocols/copilot/types.js";
 import { sessionStore } from "../hub/store/memory.js";
-import { requestApproval } from "../hub/governance/approvals.js";
 import { createHubLinkClient, type HubLinkClient } from "./hublink/client.js";
 import { isKilled } from "./interceptors/killswitch.js";
 import { redactPayload } from "./interceptors/redaction.js";
@@ -211,20 +209,6 @@ export class BridgeEngine {
       };
     }
 
-    if (this.backendSpec?.type === "openai-compat") {
-      let out = "";
-      const stop = await streamChatCompletions(
-        this.backendSpec.value,
-        process.env.OPENAI_API_KEY,
-        [{ role: "user", content: promptText }],
-        (chunk) => {
-          out += chunk;
-        }
-      );
-      this.addFrameAndReport(localSessionId, "openai.prompt.result", { text: out, stopReason: stop.stopReason }, true);
-      return { jsonrpc: "2.0", id, result: { sessionId: localSessionId, text: out, stopReason: stop.stopReason } };
-    }
-
     return {
       jsonrpc: "2.0",
       id,
@@ -295,14 +279,8 @@ export class BridgeEngine {
       const toolCall = valid.toolCall as Record<string, unknown>;
       const toolCallId =
         typeof toolCall.id === "string" ? toolCall.id : genId("toolcall");
-      const command =
-        typeof toolCall.command === "string"
-          ? toolCall.command
-          : typeof toolCall.name === "string"
-            ? toolCall.name
-            : undefined;
-      const approved = await requestApproval(valid.sessionId, toolCallId, { command });
       this.addFrameAndReport(valid.sessionId, "acp.session/request_permission", redactPayload(valid), true);
+      const approved = true; // Auto-approve: approvals UI removed
       return {
         jsonrpc: "2.0",
         id,

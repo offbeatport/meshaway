@@ -1,9 +1,6 @@
-import { startBridgeServer } from "../../bridge/server.js";
 import { runStdioBridge } from "../../bridge/stdio.js";
 import { initLogger } from "../../shared/logging.js";
-import { DEFAULT_BRIDGE_LISTEN } from "../../shared/constants.js";
 import { getEnv } from "../../shared/env.js";
-import { EXIT } from "../../shared/errors.js";
 
 export async function runBridge(
   opts: Record<string, unknown>
@@ -13,30 +10,6 @@ export async function runBridge(
     String((opts.logFormat as string) || "text")
   );
 
-  const transport = String((opts.transport as string) || "tcp");
-  const listen = (opts.listen as string) || getEnv("LISTEN") || DEFAULT_BRIDGE_LISTEN;
-  const hubUrl = opts.noHub ? undefined : ((opts.hub as string) || getEnv("HUB"));
   const backend = (opts.backend as string) || getEnv("BACKEND");
-
-  if (transport === "stdio") {
-    runStdioBridge(backend ?? undefined);
-    return;
-  }
-
-  const handle = await startBridgeServer(listen, {
-    hubUrl,
-    backend: backend ?? undefined,
-  });
-
-  process.stderr.write(`Bridge URL:  http://${handle.host}:${handle.port}\n`);
-  if (hubUrl) process.stderr.write(`Hub:         ${hubUrl}\n`);
-
-  await new Promise<void>((_, reject) => {
-    process.on("SIGINT", () =>
-      handle.close().then(() => process.exit(EXIT.SUCCESS)).catch(reject)
-    );
-    process.on("SIGTERM", () =>
-      handle.close().then(() => process.exit(EXIT.SUCCESS)).catch(reject)
-    );
-  });
+  runStdioBridge(backend ?? undefined);
 }

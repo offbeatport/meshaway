@@ -8,8 +8,6 @@ export interface RunnerSession {
   status: RunnerStatus;
   /** Bridge session ID when transport is TCP (frames from sessionStore). */
   bridgeSessionId: string | null;
-  /** Bridge URL when transport is TCP (for cancel). */
-  bridgeTarget: string | null;
   /** Frames when transport is STDIO (runner pushes to Hub). */
   frames: Frame[];
   createdAt: number;
@@ -18,7 +16,7 @@ export interface RunnerSession {
   runnerPid?: number;
   /** Agent command for STDIO (e.g. "meshaway"). */
   agentCommand?: string;
-  /** Agent args for STDIO (e.g. ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]). */
+  /** Agent args for STDIO (e.g. ["bridge", "--backend", "acp:gemini-cli"]). */
   agentArgs?: string[];
 }
 
@@ -33,7 +31,6 @@ class RunnerStore {
       runnerSessionId,
       status: "idle",
       bridgeSessionId: null,
-      bridgeTarget: null,
       frames: [],
       createdAt: now,
       updatedAt: now,
@@ -48,7 +45,7 @@ class RunnerStore {
 
   update(
     runnerSessionId: string,
-    updates: Partial<Pick<RunnerSession, "status" | "bridgeSessionId" | "bridgeTarget" | "runnerPid" | "agentCommand" | "agentArgs">>
+    updates: Partial<Pick<RunnerSession, "status" | "bridgeSessionId" | "runnerPid" | "agentCommand" | "agentArgs">>
   ): RunnerSession | undefined {
     const session = this.byId.get(runnerSessionId);
     if (!session) return undefined;
@@ -81,7 +78,6 @@ class RunnerStore {
     if (!session) return undefined;
     session.status = "idle";
     session.bridgeSessionId = null;
-    session.bridgeTarget = null;
     session.frames = [];
     session.runnerPid = undefined;
     session.updatedAt = Date.now();

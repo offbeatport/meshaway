@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseListen } from "../shared/net.js";
-import { DEFAULT_BRIDGE_LISTEN, DEFAULT_HUB_LISTEN } from "../shared/constants.js";
+import { DEFAULT_HUB_LISTEN } from "../shared/constants.js";
 
 export function openBrowser(url: string): void {
   const [cmd, args] =
@@ -30,7 +30,7 @@ export async function detectOllamaBackend(): Promise<string | undefined> {
     const res = await fetch("http://127.0.0.1:11434/api/tags", {
       signal: ctrl.signal,
     });
-    return res.ok ? "openai-compat:http://127.0.0.1:11434/v1" : undefined;
+    return undefined;
   } catch {
     return undefined;
   }

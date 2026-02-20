@@ -1,7 +1,7 @@
 /**
  * Playground Runner (STDIO): spawns meshaway bridge in stdio mode, sends prompt,
  * and pushes each bridge stdout line to Hub as a frame.
- * Uses agentCommand and agentArgs (e.g. meshaway + ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]).
+ * Uses agentCommand and agentArgs (e.g. meshaway + ["bridge", "--backend", "acp:gemini-cli"]).
  */
 
 import { spawn } from "node:child_process";
@@ -16,7 +16,7 @@ export interface SpawnRunnerStdioOptions {
   prompt: string;
   /** CLI command (e.g. "meshaway"). When "meshaway" or empty, resolved to node + built script. */
   agentCommand?: string;
-  /** CLI arguments (e.g. ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]). */
+  /** CLI arguments (e.g. ["bridge", "--backend", "acp:gemini-cli"]). */
   agentArgs?: string[];
   record?: boolean;
   recordFilename?: string;
@@ -49,7 +49,7 @@ export function resolveBridgeCommand(
   const built = join(cwd, "dist", "node", "meshaway.mjs");
   if (wantMeshaway) {
     if (existsSync(built)) {
-      return { cmd: process.execPath, args: [built, ...(agentArgs.length ? agentArgs : ["bridge", "--transport", "stdio", "--backend", backend || "acp:gemini-cli"])] };
+      return { cmd: process.execPath, args: [built, ...(agentArgs.length ? agentArgs : ["bridge", "--backend", backend || "acp:gemini-cli"])] };
     }
     const tsx = join(cwd, "node_modules", ".bin", "tsx");
     const script = join(cwd, "src", "cli", "index.ts");
@@ -58,22 +58,22 @@ export function resolveBridgeCommand(
       const runnerArgs = existsSync(tsx) ? [script] : ["tsx", script];
       return {
         cmd: runner,
-        args: [...runnerArgs, ...(agentArgs.length ? agentArgs : ["bridge", "--transport", "stdio", "--backend", backend || "acp:gemini-cli"])],
+        args: [...runnerArgs, ...(agentArgs.length ? agentArgs : ["bridge", "--backend", backend || "acp:gemini-cli"])],
       };
     }
-    return { cmd: process.execPath, args: [built, "bridge", "--transport", "stdio", "--backend", backend || "acp:gemini-cli"] };
+    return { cmd: process.execPath, args: [built, "bridge", "--backend", backend || "acp:gemini-cli"] };
   }
   return { cmd: agentCommand, args: agentArgs };
 }
 
 /** @deprecated Use resolveBridgeCommand(agentCommand, agentArgs) with agentArgs including --backend. */
 export function getBridgeCommand(backend: string): { cmd: string; args: string[] } {
-  return resolveBridgeCommand("meshaway", ["bridge", "--transport", "stdio", "--backend", backend]);
+  return resolveBridgeCommand("meshaway", ["bridge", "--backend", backend]);
 }
 
 export function spawnPlaygroundRunnerStdio(options: SpawnRunnerStdioOptions): ReturnType<typeof spawn> {
   const { runnerSessionId, hubUrl, clientType, prompt, agentCommand = "meshaway", agentArgs = [] } = options;
-  const { cmd, args } = resolveBridgeCommand(agentCommand, agentArgs.length ? agentArgs : ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]);
+  const { cmd, args } = resolveBridgeCommand(agentCommand, agentArgs.length ? agentArgs : ["bridge", "--backend", "acp:gemini-cli"]);
   const backendEnv = extractBackendFromArgs(args);
   const child = spawn(cmd, args, {
     cwd: process.cwd(),

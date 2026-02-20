@@ -1,13 +1,17 @@
 import { useState, useCallback } from "react";
 import { Copy, Check } from "lucide-react";
 
-const BRIDGE_URL = "http://127.0.0.1:4321";
+function getHubUrl(): string {
+  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
+  return "http://127.0.0.1:7337";
+}
 
 export function CopyBridgeUrl({ className = "" }: { className?: string }) {
   const [copied, setCopied] = useState(false);
+  const hubUrl = getHubUrl();
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(BRIDGE_URL);
+    await navigator.clipboard.writeText(hubUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, []);
@@ -22,7 +26,7 @@ export function CopyBridgeUrl({ className = "" }: { className?: string }) {
       ) : (
         <Copy className="h-4 w-4" />
       )}
-      {copied ? "Copied" : "Copy Bridge URL"}
+      {copied ? "Copied" : "Copy Hub URL"}
     </button>
   );
 }

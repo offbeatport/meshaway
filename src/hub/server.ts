@@ -7,7 +7,6 @@ import { EXIT, exit } from "../shared/errors.js";
 import { genId } from "../shared/ids.js";
 import { sessionStore } from "./store/memory.js";
 import { runnerStore } from "./store/runner.js";
-import { resolveApproval, listPendingApprovals } from "./governance/approvals.js";
 import { getDefaultBackend } from "./governance/policy.js";
 import { markKilled } from "../bridge/interceptors/killswitch.js";
 import { EMBEDDED_UI } from "./embedded-ui.generated.js";
@@ -45,9 +44,6 @@ function serveEmbeddedUi(app: Hono): void {
   app.get("/", () => new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }));
   app.get("/sessions", () => new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }));
   app.get("/sessions/*", () => new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }));
-  app.get("/approvals", () => new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }));
-  app.get("/routing", () => new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }));
-  app.get("/system", () => new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }));
   app.get("/playground", () => new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }));
 }
 
@@ -71,15 +67,7 @@ export function createHubApp(): Hono {
     return c.json({
       hub: true,
       backend: backend ?? "not configured",
-      bridgeUrl: "http://127.0.0.1:4321",
     });
-  });
-  app.get("/api/approvals", (c) =>
-    c.json(listPendingApprovals())
-  );
-  app.get("/api/routing/rules", (c) => {
-    const backend = getDefaultBackend();
-    return c.json({ rules: backend ? [{ backend }] : [] });
   });
   app.get("/api/sessions", (c) => c.json(sessionStore.listSessions()));
   app.post("/api/sessions", async (c) => {
@@ -131,51 +119,9 @@ export function createHubApp(): Hono {
     if (ok) markKilled(id);
     return c.json({ ok });
   });
-  app.post("/api/admin/approve/:id", async (c) => {
-    const body = (await c.req.json()) as { toolCallId?: string; decision?: string };
-    const sessionId = c.req.param("id");
-    const toolCallId = body.toolCallId ?? "";
-    const decision = body.decision === "approve";
-    const ok = resolveApproval(sessionId, toolCallId, decision);
-    return c.json({ ok });
-  });
-  app.post("/api/routing/rules", async (c) => {
-    const body = (await c.req.json()) as { backend?: string };
-    if (body.backend) {
-      const { setDefaultBackend } = await import("./governance/policy.js");
-      setDefaultBackend(body.backend);
-    }
-    return c.json({ ok: true });
-  });
-
-  const defaultBridgeUrl = process.env.MESH_BRIDGE_URL ?? "http://127.0.0.1:4321";
-
-  async function proxyToBridge(
-    bridgeUrl: string,
-    rpc: { jsonrpc: string; id?: number; method: string; params?: unknown },
-    faultHeaders?: Record<string, string>
-  ): Promise<Response> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...faultHeaders,
-    };
-    const res = await fetch(`${bridgeUrl}/`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(rpc),
-    });
-    const data = await res.json();
-    return new Response(JSON.stringify(data), {
-      status: res.ok ? 200 : res.status,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
   app.post("/api/playground/send", async (c) => {
     let body: {
       clientType?: string;
-      transport?: string;
-      bridgeTarget?: string;
       prompt?: string;
       runnerSessionId?: string;
       agentCommand?: string;
@@ -183,10 +129,6 @@ export function createHubApp(): Hono {
       record?: boolean;
       recordFilename?: string;
       sessionId?: string;
-      bridgeUrl?: string;
-      faultLatency?: number;
-      faultDrop?: boolean;
-      faultError?: string;
     };
     try {
       body = (await c.req.json()) as typeof body;
@@ -195,135 +137,50 @@ export function createHubApp(): Hono {
     }
     const prompt = typeof body.prompt === "string" ? body.prompt : "";
     const clientType = body.clientType === "acp" ? "acp" : "copilot";
-    const transport = body.transport === "stdio" ? "stdio" : "tcp";
-    const bridgeTarget = (typeof body.bridgeTarget === "string" && body.bridgeTarget)
-      ? body.bridgeTarget.replace(/\/+$/, "")
-      : (typeof body.bridgeUrl === "string" && body.bridgeUrl)
-        ? body.bridgeUrl.replace(/\/+$/, "")
-        : defaultBridgeUrl;
     const runnerSessionId = typeof body.runnerSessionId === "string" && body.runnerSessionId
       ? body.runnerSessionId
       : genId("runner");
 
     const runnerSession = runnerStore.createOrGet(runnerSessionId);
-
-    if (transport === "stdio") {
-      const agentCommand = typeof body.agentCommand === "string" ? body.agentCommand : runnerSession.agentCommand ?? "meshaway";
-      const agentArgs = Array.isArray(body.agentArgs) && body.agentArgs.length > 0
-        ? body.agentArgs
-        : (runnerSession.agentArgs && runnerSession.agentArgs.length > 0 ? runnerSession.agentArgs : ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]);
-      runnerStore.update(runnerSessionId, { status: "streaming" });
-      const hubBase = process.env.MESH_HUB_URL ?? `http://127.0.0.1:${process.env.PORT ?? 7337}`;
-      let bridgeCommand: { cmd: string; args: string[] } = { cmd: "node", args: [] };
-      try {
-        const { spawnPlaygroundRunnerStdio, resolveBridgeCommand } = await import("./playground/runner-stdio.js");
-        bridgeCommand = resolveBridgeCommand(agentCommand, agentArgs);
-        const child = spawnPlaygroundRunnerStdio({
-          runnerSessionId,
-          hubUrl: hubBase,
-          clientType,
-          prompt,
-          agentCommand,
-          agentArgs,
-          record: body.record === true,
-          recordFilename: typeof body.recordFilename === "string" ? body.recordFilename : undefined,
-        });
-        runnerStore.update(runnerSessionId, { runnerPid: child.pid });
-        child.on("exit", () => {
-          runnerStore.update(runnerSessionId, { runnerPid: undefined });
-        });
-      } catch (err) {
-        runnerStore.update(runnerSessionId, { status: "error" });
-        return c.json({
-          runnerSessionId,
-          status: "error",
-          error: err instanceof Error ? err.message : "Failed to start runner",
-        }, 502);
-      }
-      return c.json({
-        runnerSessionId,
-        status: "streaming",
-        bridgeType: "stdio",
-        bridgeTarget: "stdio://local",
-        agentExec: bridgeCommand.cmd,
-        agentArgs: bridgeCommand.args,
-      });
-    }
-
-    const faultHeaders: Record<string, string> = {};
-    if (typeof body.faultLatency === "number" && body.faultLatency > 0) faultHeaders["X-Mesh-Fault-Latency"] = String(body.faultLatency);
-    if (body.faultDrop === true) faultHeaders["X-Mesh-Fault-Drop"] = "1";
-    if (typeof body.faultError === "string" && body.faultError) faultHeaders["X-Mesh-Fault-Error"] = body.faultError;
-
-    const bridgeSessionId = runnerSession.bridgeSessionId ?? undefined;
+    const agentCommand = typeof body.agentCommand === "string" ? body.agentCommand : runnerSession.agentCommand ?? "meshaway";
+    const agentArgs = Array.isArray(body.agentArgs) && body.agentArgs.length > 0
+      ? body.agentArgs
+      : (runnerSession.agentArgs && runnerSession.agentArgs.length > 0 ? runnerSession.agentArgs : ["bridge", "--backend", "acp:gemini-cli"]);
+    runnerStore.update(runnerSessionId, { status: "streaming" });
+    const hubBase = process.env.MESH_HUB_URL ?? `http://127.0.0.1:${process.env.PORT ?? 7337}`;
+    let bridgeCommand: { cmd: string; args: string[] } = { cmd: "node", args: [] };
     try {
-      runnerStore.update(runnerSessionId, { status: "streaming" });
-      let sid: string | undefined = bridgeSessionId;
-      if (clientType === "acp" && !bridgeSessionId) {
-        const newRpc = { jsonrpc: "2.0" as const, id: 1, method: "session/new" as const, params: { cwd: ".", mcpServers: [] as string[] } };
-        const resNew = await proxyToBridge(bridgeTarget, newRpc, faultHeaders);
-        const dataNew = (await resNew.json()) as { result?: { sessionId?: string }; error?: { message?: string } };
-        if (dataNew.error) {
-          runnerStore.update(runnerSessionId, { status: "error" });
-          return c.json(
-            {
-              runnerSessionId,
-              status: "error",
-              error: dataNew.error.message ?? "Bridge session/new failed",
-            },
-            502
-          );
-        }
-        sid = dataNew.result?.sessionId;
-        if (sid) runnerStore.update(runnerSessionId, { bridgeSessionId: sid });
-      }
-      const rpc: { jsonrpc: string; id: number; method: string; params: Record<string, unknown> } =
-        clientType === "acp"
-          ? {
-              jsonrpc: "2.0",
-              id: 2,
-              method: "session/prompt",
-              params: { sessionId: sid ?? bridgeSessionId, prompt: [{ type: "text", text: prompt }] },
-            }
-          : {
-              jsonrpc: "2.0",
-              id: 1,
-              method: "prompt",
-              params: { prompt, ...(sid ? { sessionId: sid } : {}) },
-            };
-      const res = await proxyToBridge(bridgeTarget, rpc, faultHeaders);
-      const data = (await res.json()) as { result?: { sessionId?: string }; error?: { message?: string } };
-      if (data.error) {
-        runnerStore.update(runnerSessionId, { status: "error" });
-        return c.json(
-          {
-            runnerSessionId,
-            status: "error",
-            error: data.error.message ?? "Bridge error",
-          },
-          502
-        );
-      }
-      const resultSessionId = data.result?.sessionId ?? sid;
-      if (resultSessionId && !runnerSession.bridgeSessionId) runnerStore.update(runnerSessionId, { bridgeSessionId: resultSessionId });
-      runnerStore.update(runnerSessionId, { status: "connected", bridgeTarget });
-      return c.json({
+      const { spawnPlaygroundRunnerStdio, resolveBridgeCommand } = await import("./playground/runner-stdio.js");
+      bridgeCommand = resolveBridgeCommand(agentCommand, agentArgs);
+      const child = spawnPlaygroundRunnerStdio({
         runnerSessionId,
-        status: "connected",
-        sessionId: resultSessionId ?? runnerSession.bridgeSessionId,
-        bridgeType: "tcp",
-        bridgeTarget,
-        agentExec: null,
-        agentArgs: [],
+        hubUrl: hubBase,
+        clientType,
+        prompt,
+        agentCommand,
+        agentArgs,
+        record: body.record === true,
+        recordFilename: typeof body.recordFilename === "string" ? body.recordFilename : undefined,
+      });
+      runnerStore.update(runnerSessionId, { runnerPid: child.pid });
+      child.on("exit", () => {
+        runnerStore.update(runnerSessionId, { runnerPid: undefined });
       });
     } catch (err) {
       runnerStore.update(runnerSessionId, { status: "error" });
       return c.json({
         runnerSessionId,
         status: "error",
-        error: err instanceof Error ? err.message : "Bridge request failed",
+        error: err instanceof Error ? err.message : "Failed to start runner",
       }, 502);
     }
+    return c.json({
+      runnerSessionId,
+      status: "streaming",
+      bridgeType: "stdio",
+      agentExec: bridgeCommand.cmd,
+      agentArgs: bridgeCommand.args,
+    });
   });
 
   app.get("/api/playground/frames/:runnerSessionId", (c) => {
@@ -338,40 +195,30 @@ export function createHubApp(): Hono {
   });
 
   app.post("/api/playground/session", async (c) => {
-    let body: { clientType?: string; transport?: string; bridgeTarget?: string; agentCommand?: string; agentArgs?: string[] };
+    let body: { clientType?: string; agentCommand?: string; agentArgs?: string[] };
     try {
       body = (await c.req.json().catch(() => ({}))) as typeof body;
     } catch {
       return c.json({ error: "Invalid JSON" }, 400);
     }
     const runnerSessionId = genId("runner");
-    const transport = body.transport === "stdio" ? "stdio" : "tcp";
-    const bridgeTarget =
-      typeof body.bridgeTarget === "string" && body.bridgeTarget
-        ? body.bridgeTarget.replace(/\/+$/, "")
-        : defaultBridgeUrl;
     runnerStore.createOrGet(runnerSessionId);
     const agentCommand = typeof body.agentCommand === "string" ? body.agentCommand : "meshaway";
     const agentArgs = Array.isArray(body.agentArgs) ? body.agentArgs : [];
-    if (transport === "stdio") {
-      runnerStore.update(runnerSessionId, { agentCommand, agentArgs });
-    }
+    runnerStore.update(runnerSessionId, { agentCommand, agentArgs });
     let agentExec: string | null = null;
     let resolvedAgentArgs: string[] = [];
-    if (transport === "stdio") {
-      try {
-        const { resolveBridgeCommand } = await import("./playground/runner-stdio.js");
-        const bridgeCommand = resolveBridgeCommand(agentCommand, agentArgs.length ? agentArgs : ["bridge", "--transport", "stdio", "--backend", "acp:gemini-cli"]);
-        agentExec = bridgeCommand.cmd;
-        resolvedAgentArgs = bridgeCommand.args;
-      } catch {
-        // Metadata-only; keep session creation successful.
-      }
+    try {
+      const { resolveBridgeCommand } = await import("./playground/runner-stdio.js");
+      const bridgeCommand = resolveBridgeCommand(agentCommand, agentArgs.length ? agentArgs : ["bridge", "--backend", "acp:gemini-cli"]);
+      agentExec = bridgeCommand.cmd;
+      resolvedAgentArgs = bridgeCommand.args;
+    } catch {
+      // Metadata-only; keep session creation successful.
     }
     return c.json({
       runnerSessionId,
-      bridgeType: transport,
-      bridgeTarget: transport === "tcp" ? bridgeTarget : "stdio://local",
+      bridgeType: "stdio",
       agentExec,
       agentArgs: resolvedAgentArgs,
     });
@@ -408,22 +255,7 @@ export function createHubApp(): Hono {
       runnerStore.update(runnerSessionId, { status: "error" });
       return c.json({ ok: true, action: "kill" });
     }
-    if (action === "cancel" && runnerSession.bridgeSessionId) {
-      const cancelBridgeUrl = runnerSession.bridgeTarget ?? defaultBridgeUrl;
-      try {
-        await fetch(`${cancelBridgeUrl}/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "cancel",
-            params: { sessionId: runnerSession.bridgeSessionId },
-          }),
-        });
-      } catch {
-        // ignore
-      }
+    if (action === "cancel") {
       runnerStore.update(runnerSessionId, { status: "connected" });
       return c.json({ ok: true, action: "cancel" });
     }
@@ -444,78 +276,6 @@ export function createHubApp(): Hono {
     return frame ? c.json({ ok: true }) : c.json({ error: "Not found" }, 404);
   });
 
-  app.post("/api/playground/rpc", async (c) => {
-    let body: { bridgeUrl?: string; method: string; params?: unknown; id?: number; faultLatency?: number; faultDrop?: boolean; faultError?: string };
-    try {
-      body = (await c.req.json()) as typeof body;
-    } catch {
-      return c.json({ error: "Invalid JSON" }, 400);
-    }
-    const bridgeUrl = (typeof body.bridgeUrl === "string" && body.bridgeUrl)
-      ? body.bridgeUrl.replace(/\/+$/, "")
-      : defaultBridgeUrl;
-    const faultHeaders: Record<string, string> = {};
-    if (typeof body.faultLatency === "number" && body.faultLatency > 0) faultHeaders["X-Mesh-Fault-Latency"] = String(body.faultLatency);
-    if (body.faultDrop === true) faultHeaders["X-Mesh-Fault-Drop"] = "1";
-    if (typeof body.faultError === "string" && body.faultError) faultHeaders["X-Mesh-Fault-Error"] = body.faultError;
-    const rpc = {
-      jsonrpc: "2.0",
-      id: body.id ?? 1,
-      method: body.method,
-      params: body.params ?? {},
-    };
-    try {
-      const res = await proxyToBridge(bridgeUrl, rpc, faultHeaders);
-      const data = await res.json();
-      return c.json(data, res.status as 200 | 400 | 502);
-    } catch (err) {
-      return c.json({
-        jsonrpc: "2.0",
-        id: rpc.id,
-        error: {
-          code: -32603,
-          message: err instanceof Error ? err.message : "Bridge request failed",
-        },
-      }, 502);
-    }
-  });
-
-  app.post("/api/playground/replay", async (c) => {
-    let body: { bridgeUrl?: string; entries?: Array<{ method: string; params?: unknown }> };
-    try {
-      body = (await c.req.json()) as typeof body;
-    } catch {
-      return c.json({ error: "Invalid JSON" }, 400);
-    }
-    const bridgeUrl = (typeof body.bridgeUrl === "string" && body.bridgeUrl)
-      ? body.bridgeUrl.replace(/\/+$/, "")
-      : defaultBridgeUrl;
-    const entries = Array.isArray(body.entries) ? body.entries : [];
-    const results: unknown[] = [];
-    for (let i = 0; i < entries.length; i++) {
-      const e = entries[i];
-      const method = typeof e?.method === "string" ? e.method : "prompt";
-      const params = e?.params ?? {};
-      const rpc = { jsonrpc: "2.0", id: i + 1, method, params };
-      try {
-        const res = await fetch(`${bridgeUrl}/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(rpc),
-        });
-        const data = await res.json();
-        results.push(data);
-      } catch (err) {
-        results.push({
-          jsonrpc: "2.0",
-          id: i + 1,
-          error: { code: -32603, message: err instanceof Error ? err.message : "Request failed" },
-        });
-      }
-    }
-    return c.json({ results });
-  });
-
   const uiDir = findUiDir();
   const hasEmbedded = Object.keys(EMBEDDED_UI).length > 0;
 
@@ -527,9 +287,6 @@ export function createHubApp(): Hono {
     app.use("/assets/*", serveStatic(staticOpts));
     app.get("/", serveStatic({ path: "index.html", root: uiDir }));
     app.get("/sessions/*", serveStatic({ path: "index.html", root: uiDir }));
-    app.get("/approvals", serveStatic({ path: "index.html", root: uiDir }));
-    app.get("/routing", serveStatic({ path: "index.html", root: uiDir }));
-    app.get("/system", serveStatic({ path: "index.html", root: uiDir }));
     app.get("/playground", serveStatic({ path: "index.html", root: uiDir }));
   } else if (hasEmbedded) {
     serveEmbeddedUi(app);

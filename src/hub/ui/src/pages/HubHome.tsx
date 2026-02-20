@@ -4,18 +4,14 @@ import {
   Clock,
   Layers,
   Terminal,
-  ShieldCheck,
   ExternalLink,
   Home,
 } from "lucide-react";
-import { useState } from "react";
 import { useSessions, useHealth } from "@/lib/useApi";
-import { useApprovals } from "@/lib/useApi";
 import { formatRelativeTime, truncateId } from "@/lib/format";
 import { SkeletonCard } from "@/components/SkeletonCard";
 import { CopyBridgeUrl } from "@/components/CopyBridgeUrl";
 
-const BRIDGE_URL = "http://127.0.0.1:4321";
 
 function StatusBadge({ status }: { status: string }) {
   const styles = {
@@ -78,7 +74,6 @@ function SessionCard({
 export function HubHome() {
   const { sessions, loading } = useSessions(4000);
   const healthy = useHealth();
-  const { approvals, loading: approvalsLoading, resolve } = useApprovals(3000);
 
   const activeSessions = sessions.filter((s) => s.status === "active");
   const recentSessions = sessions
@@ -155,125 +150,21 @@ export function HubHome() {
         </div>
 
         <div className="space-y-4">
-          <h2 className="text-lg font-medium text-zinc-200 flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-amber-400/80" />
-            Pending approvals
-          </h2>
-          {approvalsLoading && approvals.length === 0 ? (
-            <div className="space-y-2">
-              {[1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 animate-pulse"
-                >
-                  <div className="h-4 w-3/4 rounded bg-zinc-700/40" />
-                  <div className="mt-2 h-3 w-1/2 rounded bg-zinc-700/30" />
-                </div>
-              ))}
-            </div>
-          ) : approvals.length === 0 ? (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-6 text-center">
-              <p className="text-sm text-zinc-500">All clear — no pending approvals</p>
-              <Link
-                to="/approvals"
-                className="mt-2 inline-block text-xs text-sky-400/90 hover:text-sky-400"
-              >
-                View approvals →
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {approvals.slice(0, 3).map((a) => (
-                <ApprovalRow key={a.key} approval={a} onResolve={resolve} />
-              ))}
-              {approvals.length > 3 && (
-                <Link
-                  to="/approvals"
-                  className="block text-center text-sm text-zinc-500 hover:text-zinc-300 py-2"
-                >
-                  +{approvals.length - 3} more →
-                </Link>
-              )}
-            </div>
-          )}
-
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
             <h3 className="text-sm font-medium text-zinc-300 mb-2">
               Quick connect
             </h3>
             <CopyBridgeUrl className="mt-0" />
             <a
-              href={BRIDGE_URL}
+              href={typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:7337"}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-2 flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Open Bridge URL
+              Open Hub
             </a>
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ApprovalRow({
-  approval,
-  onResolve,
-}: {
-  approval: { key: string; sessionId: string; toolCallId: string; command?: string };
-  onResolve: (sessionId: string, toolCallId: string, decision: "approve" | "deny") => Promise<void>;
-}) {
-  const [loading, setLoading] = useState(false);
-
-  const handleApprove = async () => {
-    setLoading(true);
-    try {
-      await onResolve(approval.sessionId, approval.toolCallId, "approve");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeny = async () => {
-    setLoading(true);
-    try {
-      await onResolve(approval.sessionId, approval.toolCallId, "deny");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <code className="text-xs font-mono text-zinc-400 truncate block">
-            {approval.command ?? approval.toolCallId}
-          </code>
-          <Link
-            to={`/sessions/${approval.sessionId}`}
-            className="text-xs text-sky-400/90 hover:text-sky-400 mt-0.5"
-          >
-            Session →
-          </Link>
-        </div>
-        <div className="flex gap-1 flex-shrink-0">
-          <button
-            onClick={handleApprove}
-            disabled={loading}
-            className="px-2 py-1 rounded text-xs font-medium bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 disabled:opacity-50"
-          >
-            Approve
-          </button>
-          <button
-            onClick={handleDeny}
-            disabled={loading}
-            className="px-2 py-1 rounded text-xs font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
-          >
-            Deny
-          </button>
         </div>
       </div>
     </div>
