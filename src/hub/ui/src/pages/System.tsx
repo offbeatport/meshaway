@@ -1,4 +1,4 @@
-import { Wifi, WifiOff, ExternalLink, Cpu, Server } from "lucide-react";
+import { Wifi, WifiOff, ExternalLink, Cpu, Server, Stethoscope } from "lucide-react";
 import { useHealth, useHealthInfo } from "@/lib/useApi";
 
 export function System() {
@@ -9,7 +9,7 @@ export function System() {
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
         <h2 className="text-xl font-semibold flex items-center gap-2">
-          <Cpu className="h-5 w-5 text-emerald-400/80" />
+          <Stethoscope className="h-5 w-5 text-sky-400/80" />
           System status
         </h2>
         <p className="mt-1 text-sm text-zinc-500">
@@ -34,7 +34,7 @@ export function System() {
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               {healthy === true ? (
-                <Wifi className="h-5 w-5 text-emerald-400" />
+                <Wifi className="h-5 w-5 text-sky-400" />
               ) : (
                 <WifiOff className="h-5 w-5 text-amber-400" />
               )}
@@ -48,7 +48,7 @@ export function System() {
             <span
               className={`px-2.5 py-1 rounded-lg text-xs font-medium ${
                 healthy === true
-                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                  ? "bg-sky-500/15 text-sky-400 border border-sky-500/30"
                   : "bg-amber-500/15 text-amber-400 border border-amber-500/30"
               }`}
             >

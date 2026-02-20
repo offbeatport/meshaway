@@ -38,7 +38,7 @@ function ApprovalRow({
         </code>
         <Link
           to={`/sessions/${approval.sessionId}`}
-          className="text-sm text-emerald-400/90 hover:text-emerald-400 mt-1 inline-block"
+          className="text-sm text-sky-400/90 hover:text-sky-400 mt-1 inline-block"
         >
           View session →
         </Link>
@@ -47,14 +47,14 @@ function ApprovalRow({
         <button
           onClick={handleApprove}
           disabled={loading}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 disabled:opacity-50 transition-colors"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 border border-sky-500/30 disabled:opacity-50"
         >
           Approve
         </button>
         <button
           onClick={handleDeny}
           disabled={loading}
-          className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 disabled:opacity-50 transition-colors"
+          className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 disabled:opacity-50"
         >
           Deny
         </button>

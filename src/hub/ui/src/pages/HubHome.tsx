@@ -6,6 +6,7 @@ import {
   Terminal,
   ShieldCheck,
   ExternalLink,
+  Home,
 } from "lucide-react";
 import { useState } from "react";
 import { useSessions, useHealth } from "@/lib/useApi";
@@ -18,7 +19,7 @@ const BRIDGE_URL = "http://127.0.0.1:4321";
 
 function StatusBadge({ status }: { status: string }) {
   const styles = {
-    active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    active: "bg-sky-500/15 text-sky-400 border-sky-500/30",
     killed: "bg-red-500/15 text-red-400 border-red-500/30",
     completed: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
   };
@@ -29,7 +30,7 @@ function StatusBadge({ status }: { status: string }) {
       className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${style}`}
     >
       {status === "active" && (
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse" />
+        <span className="w-1.5 h-1.5 rounded-full bg-sky-400 mr-1.5 animate-pulse" />
       )}
       {status}
     </span>
@@ -50,11 +51,11 @@ function SessionCard({
   return (
     <Link
       to={`/sessions/${id}`}
-      className="group block rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 hover:border-zinc-700 hover:bg-zinc-900/60 transition-all duration-200"
+      className="group block rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 hover:border-zinc-700 hover:bg-zinc-900/60"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <code className="block font-mono text-sm text-zinc-300 truncate group-hover:text-emerald-400/90 transition-colors">
+          <code className="block font-mono text-sm text-zinc-300 truncate group-hover:text-sky-400/90">
             {truncateId(id, 24)}
           </code>
           <div className="mt-2 flex items-center gap-3 text-xs text-zinc-500">
@@ -94,7 +95,10 @@ export function HubHome() {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-zinc-100">Meshaway Hub</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-100">
+          <Home className="h-6 w-6 text-sky-400/80" />
+          Welcome Home
+        </h1>
         <p className="mt-1 text-sm text-zinc-500">{statusLine}</p>
       </div>
 
@@ -102,12 +106,12 @@ export function HubHome() {
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium text-zinc-200 flex items-center gap-2">
-              <Activity className="h-5 w-5 text-emerald-400/80" />
+              <Activity className="h-5 w-5 text-sky-400/80" />
               Active sessions
             </h2>
             <Link
               to="/sessions"
-              className="text-sm text-emerald-400/90 hover:text-emerald-400 transition-colors"
+              className="text-sm text-sky-400/90 hover:text-sky-400"
             >
               View all →
             </Link>
@@ -172,7 +176,7 @@ export function HubHome() {
               <p className="text-sm text-zinc-500">All clear — no pending approvals</p>
               <Link
                 to="/approvals"
-                className="mt-2 inline-block text-xs text-emerald-400/90 hover:text-emerald-400"
+                className="mt-2 inline-block text-xs text-sky-400/90 hover:text-sky-400"
               >
                 View approvals →
               </Link>
@@ -250,7 +254,7 @@ function ApprovalRow({
           </code>
           <Link
             to={`/sessions/${approval.sessionId}`}
-            className="text-xs text-emerald-400/90 hover:text-emerald-400 mt-0.5"
+            className="text-xs text-sky-400/90 hover:text-sky-400 mt-0.5"
           >
             Session →
           </Link>
@@ -259,7 +263,7 @@ function ApprovalRow({
           <button
             onClick={handleApprove}
             disabled={loading}
-            className="px-2 py-1 rounded text-xs font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 disabled:opacity-50"
+            className="px-2 py-1 rounded text-xs font-medium bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 disabled:opacity-50"
           >
             Approve
           </button>

@@ -18,3 +18,9 @@ export function truncateId(id: string, len = 12): string {
   if (id.length <= len) return id;
   return id.slice(0, len) + "…";
 }
+
+export function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60_000)}m`;
+}

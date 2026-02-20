@@ -36,6 +36,8 @@
     "lucide-react": "^0.542.0",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
+    "prism-react-renderer": "^2.4.1",
+    "prismjs": "^1.30.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.0.1"
@@ -43,6 +45,7 @@
   "devDependencies": {
     "@github/copilot-sdk": "^0.1.25",
     "@types/node": "^24.3.3",
+    "@types/prismjs": "^1.26.6",
     "@types/react": "^18.2.73",
     "@types/react-dom": "^18.2.25",
     "@vitejs/plugin-react": "^4.3.4",

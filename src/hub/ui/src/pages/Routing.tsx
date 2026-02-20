@@ -35,7 +35,7 @@ export function Routing() {
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
         <h2 className="text-xl font-semibold flex items-center gap-2">
-          <Route className="h-5 w-5 text-emerald-400/80" />
+          <Route className="h-5 w-5 text-sky-400/80" />
           Backend routing
         </h2>
         <p className="mt-1 text-sm text-zinc-500">
@@ -60,13 +60,13 @@ export function Routing() {
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 placeholder="e.g. ollama, gemini-cli"
-                className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50"
+                className="flex-1 px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500/50"
                 autoFocus
               />
               <button
                 onClick={save}
                 disabled={saving || !value.trim()}
-                className="px-4 py-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 disabled:opacity-50 text-sm font-medium"
+                className="px-4 py-2 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 disabled:opacity-50 text-sm font-medium"
               >
                 {saving ? "Saving…" : "Save"}
               </button>
@@ -85,7 +85,7 @@ export function Routing() {
               </code>
               <button
                 onClick={startEdit}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
               >
                 <Settings className="h-4 w-4" />
                 Edit

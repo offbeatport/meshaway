@@ -15,6 +15,7 @@ import {
 import { CopilotPromptParamsSchema } from "../protocols/copilot/types.js";
 import { sessionStore } from "../hub/store/memory.js";
 import { requestApproval } from "../hub/governance/approvals.js";
+import { createHubLinkClient, type HubLinkClient } from "./hublink/client.js";
 import { isKilled } from "./interceptors/killswitch.js";
 import { redactPayload } from "./interceptors/redaction.js";
 import { type } from "arktype";
@@ -27,6 +28,7 @@ type BridgeResponse =
 
 export interface BridgeEngineOptions {
   backend?: string;
+  hubUrl?: string;
 }
 
 function parseCommand(commandLine: string): { command: string; args: string[] } {
@@ -119,6 +121,7 @@ export class BridgeEngine {
   private readonly localToBackendSession = new Map<string, string>();
   private acpClient: AcpRpcClient | null = null;
   private acpInitialized = false;
+  private hubLink: HubLinkClient | null = null;
 
   constructor(private readonly options: BridgeEngineOptions) {
     this.backendSpec = this.options.backend
@@ -126,6 +129,9 @@ export class BridgeEngine {
       : null;
     if (this.backendSpec?.type === "acp") {
       this.acpClient = new AcpRpcClient(this.backendSpec.value);
+    }
+    if (typeof this.options.hubUrl === "string" && this.options.hubUrl) {
+      this.hubLink = createHubLinkClient(this.options.hubUrl);
     }
   }
 
@@ -149,6 +155,12 @@ export class BridgeEngine {
 
   private ensureHubSession(localSessionId: string): void {
     sessionStore.ensureSession(localSessionId);
+    this.hubLink?.reportSessionStart(localSessionId).catch(() => {});
+  }
+
+  private addFrameAndReport(sessionId: string, type: string, payload: unknown, redacted = true): void {
+    const frame = sessionStore.addFrame(sessionId, type, payload, redacted);
+    if (frame) this.hubLink?.reportFrame(sessionId, type, payload).catch(() => {});
   }
 
   private async handleCopilotPrompt(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
@@ -168,7 +180,7 @@ export class BridgeEngine {
         ? parsed.prompt
         : JSON.stringify(parsed.context ?? []);
 
-    sessionStore.addFrame(localSessionId, "copilot.prompt", redactPayload(parsed), true);
+    this.addFrameAndReport(localSessionId, "copilot.prompt", redactPayload(parsed), true);
 
     if (this.backendSpec?.type === "acp" && this.acpClient) {
       await this.ensureAcpInitialized();
@@ -188,7 +200,7 @@ export class BridgeEngine {
         sessionId: backendSessionId,
         prompt: [{ type: "text", text: promptText }],
       });
-      sessionStore.addFrame(localSessionId, "acp.session/prompt.result", redactPayload(result), true);
+      this.addFrameAndReport(localSessionId, "acp.session/prompt.result", redactPayload(result), true);
       return {
         jsonrpc: "2.0",
         id,
@@ -209,7 +221,7 @@ export class BridgeEngine {
           out += chunk;
         }
       );
-      sessionStore.addFrame(localSessionId, "openai.prompt.result", { text: out, stopReason: stop.stopReason }, true);
+      this.addFrameAndReport(localSessionId, "openai.prompt.result", { text: out, stopReason: stop.stopReason }, true);
       return { jsonrpc: "2.0", id, result: { sessionId: localSessionId, text: out, stopReason: stop.stopReason } };
     }
 
@@ -243,7 +255,7 @@ export class BridgeEngine {
         typeof result?.sessionId === "string" ? result.sessionId : genId("sess");
       this.localToBackendSession.set(backendSessionId, backendSessionId);
       this.ensureHubSession(backendSessionId);
-      sessionStore.addFrame(backendSessionId, "acp.session/new", redactPayload(valid), true);
+      this.addFrameAndReport(backendSessionId, "acp.session/new", redactPayload(valid), true);
       return { jsonrpc: "2.0", id, result };
     }
 
@@ -257,8 +269,8 @@ export class BridgeEngine {
       const backendSessionId = this.resolveBackendSessionId(localSessionId);
       const payload = { ...valid, sessionId: backendSessionId };
       const result = await this.acpClient.request("session/prompt", payload);
-      sessionStore.addFrame(localSessionId, "acp.session/prompt", redactPayload(payload), true);
-      sessionStore.addFrame(localSessionId, "acp.session/prompt.result", redactPayload(result), true);
+      this.addFrameAndReport(localSessionId, "acp.session/prompt", redactPayload(payload), true);
+      this.addFrameAndReport(localSessionId, "acp.session/prompt.result", redactPayload(result), true);
       return { jsonrpc: "2.0", id, result };
     }
 
@@ -270,7 +282,7 @@ export class BridgeEngine {
         sessionId: backendSessionId,
       });
       sessionStore.updateSession(valid.sessionId, { status: "completed" });
-      sessionStore.addFrame(valid.sessionId, "acp.session/cancel", redactPayload(valid), true);
+      this.addFrameAndReport(valid.sessionId, "acp.session/cancel", redactPayload(valid), true);
       return { jsonrpc: "2.0", id, result };
     }
 
@@ -290,7 +302,7 @@ export class BridgeEngine {
             ? toolCall.name
             : undefined;
       const approved = await requestApproval(valid.sessionId, toolCallId, { command });
-      sessionStore.addFrame(valid.sessionId, "acp.session/request_permission", redactPayload(valid), true);
+      this.addFrameAndReport(valid.sessionId, "acp.session/request_permission", redactPayload(valid), true);
       return {
         jsonrpc: "2.0",
         id,

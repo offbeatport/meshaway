@@ -1,5 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
+import { Checkbox } from "@base-ui/react/checkbox";
+import { AppSelect } from "@/components/AppSelect";
+import { SyntaxHighlight } from "@/components/SyntaxHighlight";
 import {
   Send,
   Loader2,
@@ -16,39 +19,70 @@ import {
   ChevronRight,
   Download,
   RotateCcw,
+  Copy,
+  Plug,
+  Unplug,
 } from "lucide-react";
-import { useHealthInfo, useApprovals } from "@/lib/useApi";
+import { useHealthInfo } from "@/lib/useApi";
 import {
-  sendPlaygroundPrompt,
-  sendPlaygroundRpc,
+  sendPlaygroundRunner,
   setRoutingBackend,
-  fetchFrames,
-  killSession,
+  createPlaygroundSession,
+  fetchPlaygroundFrames,
+  playgroundControl,
   getSessionExportUrl,
   replayPlayground,
   type Frame,
-  type PendingApproval,
 } from "@/lib/api";
 
 type Dialect = "copilot" | "acp";
+type Transport = "tcp" | "stdio";
 
 const COMMON_BACKENDS = [
   "acp:gemini-cli",
-  "openai-compat:http://127.0.0.1:11434/v1",
-  "openai-compat:http://127.0.0.1:8080/v1",
+  "acp:copilot",
+  "acp:claude",
+  "acp:opencode",
 ];
+
+type PipelineId = "copilot-stdio-gemini" | "copilot-stdio-claude" | "copilot-stdio-opencode" | "acp-stdio-opencode";
+
+const PIPELINE_OPTIONS: {
+  value: PipelineId;
+  label: string;
+  part1: string;
+  part2: string;
+  part3: string;
+  dialect: Dialect;
+  transport: Transport;
+  backend: string;
+}[] = [
+    { value: "copilot-stdio-gemini", label: "Github Copilot SDK > stdio: Bridge > acp: Gemini", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Gemini", dialect: "copilot", transport: "stdio", backend: "acp:gemini-cli" },
+    { value: "copilot-stdio-claude", label: "Github Copilot SDK > stdio: Bridge > acp: Claude Code", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: Claude Code", dialect: "copilot", transport: "stdio", backend: "acp:claude" },
+    { value: "copilot-stdio-opencode", label: "Github Copilot SDK > stdio: Bridge > acp: OpenCode", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: "acp: OpenCode", dialect: "copilot", transport: "stdio", backend: "acp:opencode" },
+    { value: "acp-stdio-opencode", label: "ACP Client SDK > stdio: Bridge > acp: OpenCode", part1: "ACP Client SDK", part2: "stdio: Bridge", part3: "acp: OpenCode", dialect: "acp", transport: "stdio", backend: "acp:opencode" },
+  ];
 
 export function Playground() {
   const { healthInfo } = useHealthInfo();
-  const { approvals, resolve, refresh: refreshApprovals } = useApprovals(2000);
+  const [selectedPipeline, setSelectedPipeline] = useState<PipelineId>("copilot-stdio-gemini");
   const [dialect, setDialect] = useState<Dialect>("copilot");
+  const [transport, setTransport] = useState<Transport>("stdio");
+  const [runnerSessionId, setRunnerSessionId] = useState("");
   const [sessionId, setSessionId] = useState("");
+  const runnerSessionIdRef = useRef("");
   const [prompt, setPrompt] = useState("");
-  const [backendOverride, setBackendOverride] = useState("");
+  const [backendOverride, setBackendOverride] = useState("acp:gemini-cli");
   const [sending, setSending] = useState(false);
   const [lastResult, setLastResult] = useState<{
+    runnerSessionId?: string;
     sessionId?: string;
+    status?: string;
     error?: string;
+    bridgeType?: "tcp" | "stdio";
+    bridgeTarget?: string;
+    agentExec?: string | null;
+    agentArgs?: string[];
     raw?: unknown;
   } | null>(null);
   const [frames, setFrames] = useState<Frame[]>([]);
@@ -61,108 +95,178 @@ export function Playground() {
   const [replayJson, setReplayJson] = useState("");
   const [replaying, setReplaying] = useState(false);
   const [replayResults, setReplayResults] = useState<unknown[] | null>(null);
+  const [bridgeTargetOverride] = useState("");
+  const [toolsEnabled, setToolsEnabled] = useState(true);
+  const [toolPolicy, setToolPolicy] = useState<"auto" | "ask" | "deny">("ask");
+  const [selectedToolCallId, setSelectedToolCallId] = useState<string | null>(null);
+  const [framesTab, setFramesTab] = useState<"events" | "frames">("events");
+  const [frameSearch, setFrameSearch] = useState("");
+  const [highlightedFrameId, setHighlightedFrameId] = useState<string | null>(null);
 
   const bridgeUrl = healthInfo?.bridgeUrl ?? "http://127.0.0.1:4321";
   const currentBackend = healthInfo?.backend ?? "not configured";
-  const sessionApprovals = sessionId
-    ? approvals.filter((a) => a.sessionId === sessionId)
-    : [];
+  const activeRunnerSessionId = lastResult?.runnerSessionId ?? runnerSessionId;
+  runnerSessionIdRef.current = activeRunnerSessionId;
+  const inferredToolCalls = frames
+    .filter((f) => {
+      const p = f.payload as Record<string, unknown> | undefined;
+      return (
+        f.type.includes("tool") ||
+        Boolean(p && (p.toolCallId || p.name || p.command))
+      );
+    })
+    .map((f) => {
+      const p = (f.payload || {}) as Record<string, unknown>;
+      return {
+        id: String(p.toolCallId ?? f.id),
+        name: String(p.name ?? p.command ?? f.type),
+        status: String(p.status ?? "pending"),
+        args: p.args ?? p.arguments ?? p.params,
+        result: p.result,
+        timestamp: f.timestamp,
+      };
+    });
+  const selectedToolCall = inferredToolCalls.find((t) => t.id === selectedToolCallId) ?? null;
+  const playgroundStatus =
+    lastResult?.error != null
+      ? "error"
+      : sending
+        ? "streaming"
+        : activeRunnerSessionId
+          ? (lastResult?.status as string) || "connected"
+          : "idle";
+  const runStatus = playgroundStatus === "connected" ? "running" : playgroundStatus;
+  const resolvedBackend = backendOverride.trim() || currentBackend || COMMON_BACKENDS[0];
+  const effectiveBridgeType = lastResult?.bridgeType ?? transport;
+  const effectiveBridgeTarget =
+    lastResult?.bridgeTarget ??
+    (transport === "tcp" ? bridgeTargetOverride.trim() || bridgeUrl : "stdio://local");
+  const effectiveAgentExec =
+    lastResult?.agentExec ??
+    (effectiveBridgeType === "stdio" ? "auto-resolved by hub runner" : "external bridge process");
+  const effectiveAgentArgs =
+    lastResult?.agentArgs && lastResult.agentArgs.length > 0
+      ? lastResult.agentArgs
+      : effectiveBridgeType === "stdio"
+        ? ["bridge", "--transport", "stdio", "--backend", resolvedBackend]
+        : [];
+  const bridgeSummary =
+    effectiveBridgeType === "tcp"
+      ? `tcp ${effectiveBridgeTarget.replace(/^https?:\/\//, "")}`
+      : "stdio";
+  const canControl = Boolean(activeRunnerSessionId) && runStatus !== "idle";
+  const configBridgeTarget = transport === "tcp" ? effectiveBridgeTarget : "stdio://local";
+  const clientStatus = lastResult?.error ? "Error" : "Ready";
+  const bridgeStatus = activeRunnerSessionId ? (lastResult?.error ? "Error" : "Connected") : "Disconnected";
+  const backendStatus = activeRunnerSessionId ? (lastResult?.error ? "Error" : "Connected") : "Pending";
+
+  const handlePipelineChange = (value: PipelineId) => {
+    const option = PIPELINE_OPTIONS.find((p) => p.value === value);
+    if (!option) return;
+    setSelectedPipeline(value);
+    setDialect(option.dialect);
+    setTransport(option.transport);
+    setBackendOverride(option.backend);
+  };
+  const clientCode =
+    dialect === "copilot"
+      ? `const client = new CopilotClient({
+  cliPath: "meshaway",
+  cliArgs: ["--headless", "--agent", "gemini"],
+});`
+      : `const client = new AcpClient({
+  command: "meshaway",
+  args: ["bridge", "--transport", "stdio", "--backend", "${resolvedBackend}"],
+});`;
+
+
+
+  const resetRunner = useCallback(() => {
+    const id = runnerSessionIdRef.current;
+    if (id) playgroundControl(id, "reset").catch(() => { });
+    setRunnerSessionId("");
+    setSessionId("");
+    setFrames([]);
+    setLastResult(null);
+  }, []);
+
+  const handleConnect = useCallback(() => {
+    const backend = backendOverride.trim() || currentBackend || COMMON_BACKENDS[0];
+    const bridgeTarget = bridgeTargetOverride.trim() || bridgeUrl;
+    setRoutingBackend(backend).catch(() => { });
+    createPlaygroundSession({
+      clientType: dialect,
+      transport,
+      bridgeTarget: transport === "tcp" ? bridgeTarget : undefined,
+      backend,
+    })
+      .then(({ runnerSessionId: id, bridgeType, bridgeTarget, agentExec, agentArgs }) => {
+        setRunnerSessionId(id);
+        setLastResult({
+          runnerSessionId: id,
+          status: "connected",
+          bridgeType,
+          bridgeTarget,
+          agentExec,
+          agentArgs,
+        });
+      })
+      .catch(() => { });
+  }, [dialect, transport, backendOverride, bridgeTargetOverride, bridgeUrl, currentBackend]);
+
+  useEffect(() => {
+    resetRunner();
+    handleConnect();
+  }, [dialect, transport, bridgeTargetOverride, backendOverride, resetRunner, bridgeUrl, currentBackend]);
 
   const loadFrames = useCallback(async () => {
-    if (!sessionId) return;
+    if (!activeRunnerSessionId) return;
     try {
-      const list = await fetchFrames(sessionId);
+      const list = await fetchPlaygroundFrames(activeRunnerSessionId);
       setFrames(list);
     } catch {
       setFrames([]);
     }
-  }, [sessionId]);
+  }, [activeRunnerSessionId]);
 
   useEffect(() => {
+    if (!activeRunnerSessionId) return;
     loadFrames();
-    const id = setInterval(loadFrames, 2000);
+    const id = setInterval(loadFrames, 1500);
     return () => clearInterval(id);
-  }, [loadFrames]);
-
-  const handleNewAcpSession = async () => {
-    setSending(true);
-    setLastResult(null);
-    try {
-      const init = await sendPlaygroundRpc({
-        method: "initialize",
-        params: {},
-        bridgeUrl,
-      });
-      if ((init as { error?: unknown }).error) {
-        setLastResult({ error: (init as { error: { message?: string } }).error?.message ?? "Initialize failed" });
-        return;
-      }
-      const sessionRes = await sendPlaygroundRpc({
-        method: "session/new",
-        params: { cwd: ".", mcpServers: [] },
-        bridgeUrl,
-      });
-      const result = sessionRes.result as { sessionId?: string } | undefined;
-      const sid = result?.sessionId;
-      if (sid) {
-        setSessionId(sid);
-        setLastResult({ sessionId: sid, raw: sessionRes });
-      } else {
-        setLastResult({ error: "session/new returned no sessionId", raw: sessionRes });
-      }
-    } catch (err) {
-      setLastResult({ error: err instanceof Error ? err.message : "Failed" });
-    } finally {
-      setSending(false);
-    }
-  };
+  }, [activeRunnerSessionId, loadFrames]);
 
   const handleSend = async () => {
     if (!prompt.trim()) return;
     setSending(true);
     setLastResult(null);
-    const faultPayload = {
-      ...(faultLatency > 0 && { faultLatency }),
-      ...(faultDrop && { faultDrop: true }),
-      ...(faultError.trim() && { faultError: faultError.trim() }),
-    };
+    const backend = backendOverride.trim() || currentBackend || COMMON_BACKENDS[0];
+    const bridgeTarget = bridgeTargetOverride.trim() || bridgeUrl;
     try {
-      if (dialect === "acp") {
-        if (!sessionId.trim()) {
-          setLastResult({ error: "Start an ACP session first (New ACP session)" });
-          setSending(false);
-          return;
-        }
-        const res = await sendPlaygroundRpc({
-          method: "session/prompt",
-          params: {
-            sessionId: sessionId.trim(),
-            prompt: [{ type: "text", text: prompt.trim() }],
-          },
-          bridgeUrl,
-          ...faultPayload,
-        });
-        const err = (res as { error?: { message?: string } }).error;
-        setLastResult(
-          err
-            ? { error: err.message, raw: res }
-            : { sessionId: sessionId.trim(), raw: res }
-        );
-      } else {
-        const res = await sendPlaygroundPrompt({
-          prompt: prompt.trim(),
-          sessionId: sessionId.trim() || undefined,
-          bridgeUrl,
-          ...faultPayload,
-        });
-        if (res.error) {
-          setLastResult({ error: res.error.message, raw: res });
-        } else {
-          const sid = res.result?.sessionId;
-          setLastResult({ sessionId: sid, raw: res });
-          if (sid && !sessionId.trim()) setSessionId(sid);
-        }
-      }
+      const res = await sendPlaygroundRunner({
+        clientType: dialect,
+        transport,
+        bridgeTarget: transport === "tcp" ? bridgeTarget : undefined,
+        backend,
+        prompt: prompt.trim(),
+        runnerSessionId: activeRunnerSessionId || undefined,
+        faultLatency: faultLatency > 0 ? faultLatency : undefined,
+        faultDrop: faultDrop || undefined,
+        faultError: faultError.trim() || undefined,
+      });
+      setRunnerSessionId(res.runnerSessionId);
+      setLastResult({
+        runnerSessionId: res.runnerSessionId,
+        sessionId: res.sessionId,
+        status: res.status,
+        error: res.error,
+        bridgeType: res.bridgeType,
+        bridgeTarget: res.bridgeTarget,
+        agentExec: res.agentExec,
+        agentArgs: res.agentArgs,
+        raw: res,
+      });
+      if (res.sessionId && !sessionId.trim()) setSessionId(res.sessionId);
       loadFrames();
     } catch (err) {
       setLastResult({ error: err instanceof Error ? err.message : "Request failed" });
@@ -171,36 +275,25 @@ export function Playground() {
     }
   };
 
-  const handleSetBackend = async () => {
-    if (!backendOverride.trim()) return;
-    try {
-      await setRoutingBackend(backendOverride.trim());
-    } catch {
-      // ignore
-    }
-  };
-
   const handleKill = async () => {
-    if (!sessionId) return;
+    if (!activeRunnerSessionId) return;
     setKilling(true);
     try {
-      const ok = await killSession(sessionId);
-      if (ok) setLastResult({ sessionId, error: "Session killed" });
+      await playgroundControl(activeRunnerSessionId, "kill");
+      setLastResult((r) => ({ ...r, runnerSessionId: activeRunnerSessionId, error: "Session killed" }));
+    } catch (err) {
+      setLastResult({ error: err instanceof Error ? err.message : "Kill failed" });
     } finally {
       setKilling(false);
     }
   };
 
   const handleCancel = async () => {
-    if (!sessionId) return;
+    if (!activeRunnerSessionId) return;
     setCancelling(true);
     try {
-      await sendPlaygroundRpc({
-        method: "cancel",
-        params: { sessionId },
-        bridgeUrl,
-      });
-      setLastResult({ sessionId, raw: { result: "cancel sent" } });
+      await playgroundControl(activeRunnerSessionId, "cancel");
+      setLastResult((r) => ({ ...r, runnerSessionId: activeRunnerSessionId, raw: { result: "cancel sent" } }));
     } catch (err) {
       setLastResult({ error: err instanceof Error ? err.message : "Cancel failed" });
     } finally {
@@ -208,11 +301,8 @@ export function Playground() {
     }
   };
 
-  const handleApproveAll = async () => {
-    for (const a of sessionApprovals) {
-      await resolve(a.sessionId, a.toolCallId, "approve");
-    }
-    refreshApprovals();
+  const handleReset = () => {
+    resetRunner();
   };
 
   const handleReplay = async () => {
@@ -242,95 +332,210 @@ export function Playground() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-zinc-100">Playground</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-100">
+          <Play className="h-6 w-6 text-sky-400/80" />
+          Playground
+        </h1>
         <p className="mt-1 text-sm text-zinc-500">
           Test translation and routing: choose dialect, send messages, watch frames and tool calls. No external client.
         </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-zinc-400">
+            Status: <span className="text-zinc-200">{runStatus}</span>
+          </span>
+          <span className="rounded-full border border-zinc-700 bg-zinc-900/60 px-2 py-0.5 text-zinc-400">
+            Frames: {frames.length}
+          </span>
+          <span className="rounded-full border border-zinc-700 bg-zinc-900/60 px-2 py-0.5 text-zinc-400">
+            Tool calls: {inferredToolCalls.length}
+          </span>
+        </div>
       </div>
 
-      {/* Session + dialect */}
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
-          <Layers className="h-4 w-4" />
-          Session
-        </h2>
-        <div className="flex flex-wrap gap-4 items-center">
-          <div className="flex gap-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="dialect"
-                checked={dialect === "copilot"}
-                onChange={() => setDialect("copilot")}
-                className="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50"
-              />
-              <span className="text-sm text-zinc-300">Copilot JSON-RPC</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="dialect"
-                checked={dialect === "acp"}
-                onChange={() => setDialect("acp")}
-                className="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/50"
-              />
-              <span className="text-sm text-zinc-300">ACP</span>
-            </label>
+      {/* Configuration + Client code */}
+      <section className="pt-5 border-t border-zinc-800">
+        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+          <div className="flex flex-col max-w-md">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[13px] font-medium text-zinc-400 tracking-tight">
+                Configuration
+              </label>
+              <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold">
+                Stdio Bridge
+              </span>
+            </div>
+
+            <AppSelect<PipelineId>
+              value={selectedPipeline}
+              onValueChange={handlePipelineChange}
+              items={PIPELINE_OPTIONS.map((p) => ({
+                value: p.value,
+                label: `${p.part1} → ${p.part3}`,
+                mutedSegment: p.part3.startsWith("acp: ") ? " → acp: " : undefined,
+              }))}
+              placeholder="Select a pipeline configuration..."
+            />
+
+            <div className="mt-3 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-[11px]">
+              <span className="text-zinc-500">Status:</span>
+              <span className="font-medium text-zinc-400">
+                Client <span className={clientStatus === "Error" ? "text-red-400" : "text-zinc-300"}>{clientStatus}</span>
+                <span className="text-zinc-600 mx-1">→</span>
+                Bridge <span className={bridgeStatus === "Error" ? "text-red-400" : bridgeStatus === "Connected" ? "text-emerald-400" : "text-zinc-500"}>{bridgeStatus}</span>
+                <span className="text-zinc-600 mx-1">→</span>
+                Backend <span className={backendStatus === "Error" ? "text-red-400" : backendStatus === "Connected" ? "text-emerald-400" : "text-zinc-500"}>{backendStatus}</span>
+              </span>
+              <span className="text-zinc-500">Session ID:</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <code className="min-w-0 flex-1 truncate font-mono text-zinc-300">{activeRunnerSessionId || "—"}</code>
+                <button
+                  type="button"
+                  onClick={() => activeRunnerSessionId && navigator.clipboard?.writeText(activeRunnerSessionId)}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                  aria-label="Copy runner session id"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <span className="text-zinc-500">Transport:</span>
+              <span className="font-medium text-zinc-400">STDIO (Meshaway Bridge)</span>
+              <span className="text-zinc-500">Manage:</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleConnect}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-zinc-200 hover:bg-zinc-700"
+                >
+                  <Plug className="h-3.5 w-3.5" />
+                  Reconnect
+                </button>
+                /
+                <button
+                  type="button"
+                  onClick={resetRunner}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-zinc-200 hover:bg-zinc-700"
+                >
+                  <Unplug className="h-3.5 w-3.5" />
+                  Disconnect
+                </button>
+              </div>
+            </div>
           </div>
-          {dialect === "acp" && (
-            <button
-              type="button"
-              onClick={handleNewAcpSession}
-              disabled={sending}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-700 text-zinc-200 text-sm hover:bg-zinc-600 disabled:opacity-50"
-            >
-              {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              New ACP session
-            </button>
-          )}
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-zinc-500">Session ID</label>
-            <input
-              type="text"
-              value={sessionId}
-              onChange={(e) => setSessionId(e.target.value)}
-              placeholder="leave empty for new (Copilot)"
-              className="w-56 rounded border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-zinc-100 text-sm font-mono placeholder-zinc-500"
+          <div className="flex flex-col min-h-0">
+            <div className="mb-2 text-[11px] text-zinc-500">Client code</div>
+            <SyntaxHighlight
+              code={clientCode}
+              language="javascript"
+              noBackground
+              preClassName="flex-1 min-h-[160px] max-h-56 p-3 text-xs font-mono rounded-lg overflow-auto "
             />
           </div>
         </div>
       </section>
 
-      {/* Backend */}
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-zinc-300">Backend</h2>
-        <p className="text-xs text-zinc-500">
-          Current: <code className="text-zinc-400">{currentBackend}</code>. Bridge uses backend from process startup; routing rule below is for reference.
-        </p>
-        <div className="flex flex-wrap gap-2 items-center">
-          {COMMON_BACKENDS.map((b) => (
+
+      {/* Run control bar */}
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4 text-xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-zinc-500">Runner session</span>
+            <code className="font-mono text-zinc-200">{activeRunnerSessionId || "—"}</code>
             <button
-              key={b}
               type="button"
-              onClick={() => setBackendOverride(b)}
-              className="px-2 py-1 rounded text-xs font-mono bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+              onClick={() => {
+                if (!activeRunnerSessionId) return;
+                void navigator.clipboard?.writeText(activeRunnerSessionId);
+              }}
+              className="inline-flex h-5 w-5 items-center justify-center rounded text-[11px] text-sky-400 opacity-60 hover:opacity-100 hover:bg-zinc-800"
+              aria-label="Copy runner session id"
             >
-              {b.split(":")[0]}
+              <Copy className="h-3 w-3" />
             </button>
-          ))}
-          <input
-            type="text"
-            value={backendOverride}
-            onChange={(e) => setBackendOverride(e.target.value)}
-            placeholder="acp:cmd or openai-compat:url"
-            className="flex-1 min-w-[200px] rounded border border-zinc-700 bg-zinc-900/80 px-3 py-1.5 text-zinc-100 text-sm font-mono"
-          />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-zinc-400">
+              Status: <span className="text-zinc-200">{runStatus}</span>
+            </span>
+            <span className="text-zinc-500">{frames.length} frames</span>
+          </div>
+        </div>
+
+        <div className="text-zinc-300 truncate">
+          Client: <code className="font-mono">{dialect}</code> · Bridge:{" "}
+          <code className="font-mono">{bridgeSummary}</code> · Backend:{" "}
+          <code className="font-mono">{resolvedBackend}</code>
+        </div>
+
+        <details className="rounded-lg border border-zinc-800 bg-zinc-900/40">
+          <summary className="cursor-pointer px-3 py-2 text-zinc-400 hover:text-zinc-300">
+            Details
+          </summary>
+          <div className="space-y-2 px-3 pb-3 text-zinc-300">
+            <div className="truncate">
+              Bridge session: <code className="font-mono">{sessionId || lastResult?.sessionId || "—"}</code>
+            </div>
+            <div className="truncate">
+              Agent exec: <code className="font-mono">{effectiveAgentExec}</code>
+            </div>
+            <div className="truncate">
+              CLI args: <code className="font-mono">{effectiveAgentArgs.length ? effectiveAgentArgs.join(" ") : "—"}</code>
+            </div>
+            {lastResult?.error && (
+              <div className="truncate text-red-300">
+                Last error: <code className="font-mono">{lastResult.error}</code>
+              </div>
+            )}
+            <details>
+              <summary className="cursor-pointer text-zinc-500 hover:text-zinc-400">
+                Config snapshot JSON
+              </summary>
+              <pre className="mt-1 max-h-48 overflow-auto rounded border border-zinc-800 bg-zinc-900/60 p-2 text-[11px] text-zinc-400">
+                {JSON.stringify(
+                  {
+                    dialect,
+                    transport,
+                    bridgeType: effectiveBridgeType,
+                    bridgeTarget: effectiveBridgeTarget,
+                    backend: resolvedBackend,
+                    runnerSessionId: activeRunnerSessionId || null,
+                    bridgeSessionId: sessionId || lastResult?.sessionId || null,
+                    agentExec: effectiveAgentExec,
+                    agentArgs: effectiveAgentArgs,
+                  },
+                  null,
+                  2
+                )}
+              </pre>
+            </details>
+          </div>
+        </details>
+
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={handleSetBackend}
-            className="px-3 py-1.5 rounded bg-emerald-500/20 text-emerald-400 text-sm hover:bg-emerald-500/30"
+            onClick={handleReset}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-800"
           >
-            Set routing rule
+            <RotateCcw className="h-3.5 w-3.5" />
+            Start / Reset
+          </button>
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={cancelling || !canControl}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {cancelling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleKill}
+            disabled={killing || !canControl}
+            className="ml-auto inline-flex items-center gap-1 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-1 text-[11px] hover:bg-red-500/30 disabled:opacity-50"
+          >
+            {killing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Skull className="h-3.5 w-3.5" />}
+            Kill
           </button>
         </div>
       </section>
@@ -344,9 +549,15 @@ export function Playground() {
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !sending && prompt.trim()) {
+              e.preventDefault();
+              void handleSend();
+            }
+          }}
           placeholder="e.g. What is 2+2?"
           rows={3}
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-900/80 px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 resize-y font-mono text-sm"
+          className="w-full rounded-lg border border-zinc-700 bg-zinc-900/80 px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30 resize-y font-mono text-sm"
           disabled={sending}
         />
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -355,19 +566,19 @@ export function Playground() {
             type="button"
             onClick={handleSend}
             disabled={sending || !prompt.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 disabled:opacity-50 font-medium text-sm"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 disabled:opacity-50 font-medium text-sm"
           >
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             {sending ? "Sending…" : "Send"}
           </button>
         </div>
+        <p className="text-[11px] text-zinc-500">Tip: press Cmd/Ctrl + Enter to send.</p>
         {lastResult && (
           <div
-            className={`rounded-lg border p-4 ${
-              lastResult.error
-                ? "border-amber-500/30 bg-amber-500/5"
-                : "border-emerald-500/20 bg-emerald-500/5"
-            }`}
+            className={`rounded-lg border p-4 ${lastResult.error
+              ? "border-amber-500/30 bg-amber-500/5"
+              : "border-sky-500/20 bg-sky-500/5"
+              }`}
           >
             {lastResult.error ? (
               <div className="flex items-start gap-3">
@@ -379,13 +590,13 @@ export function Playground() {
               </div>
             ) : (
               <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                <CheckCircle className="h-5 w-5 text-sky-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-emerald-200">OK</p>
+                  <p className="font-medium text-sky-200">OK</p>
                   {lastResult.sessionId && (
                     <Link
                       to={`/sessions/${lastResult.sessionId}`}
-                      className="mt-1 inline-flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300"
+                      className="mt-1 inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
                     >
                       View session <ExternalLink className="h-3.5 w-3.5" />
                     </Link>
@@ -403,91 +614,177 @@ export function Playground() {
         )}
       </section>
 
-      {/* Live frame viewer */}
-      {sessionId && (
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
-          <button
-            type="button"
-            onClick={() => setFramesOpen((o) => !o)}
-            className="w-full flex items-center justify-between text-sm font-semibold text-zinc-300"
-          >
-            <span className="flex items-center gap-2">
-              <Layers className="h-4 w-4" />
-              Live frames (raw JSON-RPC)
+      {/* Raw frames viewer */}
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+        <button
+          type="button"
+          onClick={() => setFramesOpen((o) => !o)}
+          className="w-full flex items-center justify-between text-sm font-semibold text-zinc-300"
+        >
+          <span className="flex items-center gap-2">
+            <Layers className="h-4 w-4" />
+            Raw frames
+            <span className="rounded-full border border-zinc-700 bg-zinc-900/60 px-2 py-0.5 text-[11px] text-zinc-400">
+              {frames.length}
             </span>
-            {framesOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </button>
-          {framesOpen && (
-            <div className="mt-3 space-y-2 max-h-64 overflow-auto">
-              {frames.length === 0 ? (
-                <p className="text-xs text-zinc-500">No frames yet.</p>
-              ) : (
-                frames.map((f) => (
-                  <details key={f.id} className="rounded border border-zinc-700 bg-zinc-900/60">
-                    <summary className="px-3 py-2 text-xs font-mono text-zinc-400 cursor-pointer hover:bg-zinc-800/50">
-                      {f.type} @ {new Date(f.timestamp).toISOString()}
-                    </summary>
-                    <pre className="p-3 text-xs text-zinc-500 overflow-auto whitespace-pre-wrap">
-                      {JSON.stringify(f.payload, null, 2)}
-                    </pre>
-                  </details>
-                ))
-              )}
+          </span>
+          {framesOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </button>
+        {framesOpen && (
+          <div className="mt-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setFramesTab("events")}
+                className={`px-2.5 py-1 rounded text-xs ${framesTab === "events" ? "bg-zinc-700 text-zinc-100" : "bg-zinc-800/50 text-zinc-400"}`}
+              >
+                Events
+              </button>
+              <button
+                type="button"
+                onClick={() => setFramesTab("frames")}
+                className={`px-2.5 py-1 rounded text-xs ${framesTab === "frames" ? "bg-zinc-700 text-zinc-100" : "bg-zinc-800/50 text-zinc-400"}`}
+              >
+                Frames
+              </button>
+              <input
+                type="text"
+                value={frameSearch}
+                onChange={(e) => setFrameSearch(e.target.value)}
+                placeholder="Search frames"
+                className="ml-auto w-full max-w-56 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200"
+              />
             </div>
-          )}
-        </section>
-      )}
+            {frames.length === 0 ? (
+              <p className="text-xs text-zinc-500">No frames yet.</p>
+            ) : framesTab === "events" ? (
+              <div className="space-y-1.5 max-h-64 overflow-auto">
+                {frames
+                  .filter((f) => !frameSearch || `${f.type} ${JSON.stringify(f.payload)}`.toLowerCase().includes(frameSearch.toLowerCase()))
+                  .map((f) => (
+                    <button
+                      key={`event-${f.id}`}
+                      type="button"
+                      onClick={() => {
+                        setHighlightedFrameId(f.id);
+                        setFramesTab("frames");
+                      }}
+                      className="w-full text-left rounded border border-zinc-700 bg-zinc-900/50 px-3 py-2 hover:bg-zinc-800/60"
+                    >
+                      <div className="text-xs text-zinc-200 font-mono truncate">{f.type}</div>
+                      <div className="text-[11px] text-zinc-500">{new Date(f.timestamp).toISOString()}</div>
+                    </button>
+                  ))}
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-72 overflow-auto">
+                {frames
+                  .filter((f) => !frameSearch || `${f.type} ${JSON.stringify(f.payload)}`.toLowerCase().includes(frameSearch.toLowerCase()))
+                  .map((f) => (
+                    <div
+                      key={`frame-${f.id}`}
+                      className={`rounded border p-2 ${highlightedFrameId === f.id ? "border-sky-500/50 bg-sky-500/10" : "border-zinc-700 bg-zinc-900/50"}`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <code className="text-xs text-zinc-300 font-mono">{f.type}</code>
+                        <button
+                          type="button"
+                          onClick={() => void navigator.clipboard?.writeText(JSON.stringify(f.payload, null, 2))}
+                          className="text-[11px] text-sky-400 hover:text-sky-300"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre className="text-[11px] text-zinc-400 overflow-auto whitespace-pre-wrap">
+                        {JSON.stringify(f.payload, null, 2)}
+                      </pre>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
-      {/* Tool-call panel */}
-      {sessionId && (
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
-          <h2 className="text-sm font-semibold text-zinc-300 flex items-center gap-2 mb-3">
+      {/* Tools panel */}
+      <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-amber-400/80" />
-            Tool calls (this session)
+            Tools
           </h2>
-          {sessionApprovals.length === 0 ? (
-            <p className="text-xs text-zinc-500">No pending approvals.</p>
-          ) : (
-            <div className="space-y-2">
-              {sessionApprovals.length > 1 && (
+          <label className="inline-flex items-center gap-2 text-xs text-zinc-400">
+            <Checkbox.Root
+              checked={toolsEnabled}
+              onCheckedChange={(v) => setToolsEnabled(!!v)}
+              className="size-4 rounded border border-zinc-600 bg-zinc-800 data-[checked]:bg-sky-500 data-[checked]:border-sky-500 flex items-center justify-center"
+            >
+              <Checkbox.Indicator className="text-white">
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="2,6 5,9 10,3" />
+                </svg>
+              </Checkbox.Indicator>
+            </Checkbox.Root>
+            Tools enabled
+          </label>
+        </div>
+        <p className="text-[11px] text-zinc-500">
+          Parsed from incoming frames. Use policy controls to model expected approvals behavior.
+        </p>
+
+        <div className="max-w-xs">
+          <div className="text-xs text-zinc-500 mb-1">Tool policy</div>
+          <AppSelect<"auto" | "ask" | "deny">
+            value={toolPolicy}
+            onValueChange={setToolPolicy}
+            items={[
+              { value: "auto", label: "Auto" },
+              { value: "ask", label: "Ask" },
+              { value: "deny", label: "Deny" },
+            ]}
+            placeholder="Select policy"
+          />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="space-y-2 max-h-52 overflow-auto">
+            {inferredToolCalls.length === 0 ? (
+              <p className="text-xs text-zinc-500">No tool calls yet.</p>
+            ) : (
+              inferredToolCalls.map((t) => (
                 <button
+                  key={`${t.id}-${t.timestamp}`}
                   type="button"
-                  onClick={handleApproveAll}
-                  className="text-xs text-emerald-400 hover:text-emerald-300"
+                  onClick={() => setSelectedToolCallId(t.id)}
+                  className={`w-full text-left rounded-lg border px-3 py-2 ${selectedToolCallId === t.id
+                    ? "border-sky-500/40 bg-sky-500/10"
+                    : "border-zinc-700 bg-zinc-900/50 hover:bg-zinc-800/60"
+                    }`}
                 >
-                  Approve all ({sessionApprovals.length})
+                  <div className="text-xs font-mono text-zinc-200 truncate">{t.name}</div>
+                  <div className="text-[11px] text-zinc-500">{t.status}</div>
                 </button>
-              )}
-              {sessionApprovals.map((a) => (
-                <div
-                  key={a.key}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-zinc-700 bg-zinc-900/60 p-2"
-                >
-                  <code className="text-xs font-mono text-zinc-400 truncate flex-1">
-                    {a.command ?? a.toolCallId}
-                  </code>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => resolve(a.sessionId, a.toolCallId, "approve")}
-                      className="px-2 py-1 rounded text-xs bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => resolve(a.sessionId, a.toolCallId, "deny")}
-                      className="px-2 py-1 rounded text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                    >
-                      Deny
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
+              ))
+            )}
+          </div>
+          <div className="rounded-lg border border-zinc-700 bg-zinc-900/50 p-3">
+            {!selectedToolCall ? (
+              <p className="text-xs text-zinc-500">Select a tool call to inspect args/output.</p>
+            ) : (
+              <>
+                <p className="text-xs text-zinc-400 mb-1">Args</p>
+                <pre className="max-h-24 overflow-auto text-[11px] text-zinc-300 font-mono bg-zinc-900 p-2 rounded">
+                  {JSON.stringify(selectedToolCall.args, null, 2)}
+                </pre>
+                <p className="text-xs text-zinc-400 mt-3 mb-1">Output</p>
+                <pre className="max-h-24 overflow-auto text-[11px] text-zinc-300 font-mono bg-zinc-900 p-2 rounded">
+                  {JSON.stringify(selectedToolCall.result, null, 2)}
+                </pre>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Record / Replay */}
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
@@ -504,7 +801,7 @@ export function Playground() {
             download={`session-${sessionId}.jsonl`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-emerald-400 hover:text-emerald-300"
+            className="inline-flex items-center gap-2 text-sm text-sky-400 hover:text-sky-300"
           >
             <Download className="h-4 w-4" />
             Export this session (JSONL)
@@ -542,30 +839,6 @@ export function Playground() {
         )}
       </section>
 
-      {/* Kill / Cancel */}
-      {sessionId && (
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={handleKill}
-            disabled={killing}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50 text-sm font-medium"
-          >
-            {killing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Skull className="h-4 w-4" />}
-            Kill session
-          </button>
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={cancelling}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-600/50 text-zinc-300 border border-zinc-600 hover:bg-zinc-600 disabled:opacity-50 text-sm font-medium"
-          >
-            {cancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
-            Cancel
-          </button>
-        </section>
-      )}
-
       {/* Fault toggles */}
       <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5 space-y-3">
         <h2 className="text-sm font-semibold text-amber-200/90 flex items-center gap-2">
@@ -585,12 +858,17 @@ export function Playground() {
             />
           </label>
           <label className="flex items-center gap-2 text-sm text-zinc-400 cursor-pointer">
-            <input
-              type="checkbox"
+            <Checkbox.Root
               checked={faultDrop}
-              onChange={(e) => setFaultDrop(e.target.checked)}
-              className="rounded border-zinc-600 bg-zinc-800 text-amber-500"
-            />
+              onCheckedChange={(checked) => setFaultDrop(!!checked)}
+              className="size-4 rounded border border-zinc-600 bg-zinc-800 data-[checked]:bg-amber-500 data-[checked]:border-amber-500 flex items-center justify-center"
+            >
+              <Checkbox.Indicator className="text-white">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="2,6 5,9 10,3" />
+                </svg>
+              </Checkbox.Indicator>
+            </Checkbox.Root>
             Drop connection
           </label>
           <div className="flex items-center gap-2">
@@ -619,7 +897,7 @@ export function Playground() {
           pnpm run runner
         </code>
         <p className="mt-2 text-xs text-zinc-500">
-          Or open <Link to="/sessions" className="text-emerald-400/90 hover:text-emerald-400">Sessions</Link> to see live activity.
+          Or open <Link to="/sessions" className="text-sky-400/90 hover:text-sky-400">Sessions</Link> to see live activity.
         </p>
       </section>
     </div>

@@ -4,7 +4,9 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { EXIT, exit } from "../shared/errors.js";
+import { genId } from "../shared/ids.js";
 import { sessionStore } from "./store/memory.js";
+import { runnerStore } from "./store/runner.js";
 import { resolveApproval, listPendingApprovals } from "./governance/approvals.js";
 import { getDefaultBackend } from "./governance/policy.js";
 import { markKilled } from "../bridge/interceptors/killswitch.js";
@@ -81,9 +83,27 @@ export function createHubApp(): Hono {
   });
   app.get("/api/sessions", (c) => c.json(sessionStore.listSessions()));
   app.post("/api/sessions", async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { sessionId?: string };
+    const body = (await c.req.json().catch(() => ({}))) as { sessionId?: string; type?: string };
+    if (typeof body.sessionId === "string" && body.sessionId) {
+      const session = sessionStore.ensureSession(body.sessionId);
+      return c.json(session);
+    }
     const session = sessionStore.createSession();
     return c.json(session);
+  });
+  app.post("/api/sessions/:id/frames", async (c) => {
+    const id = c.req.param("id");
+    let body: { type?: string; payload?: unknown };
+    try {
+      body = (await c.req.json().catch(() => ({}))) as typeof body;
+    } catch {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const type = typeof body.type === "string" ? body.type : "raw";
+    const payload = body.payload;
+    sessionStore.ensureSession(id);
+    const frame = sessionStore.addFrame(id, type, payload, false);
+    return frame ? c.json({ ok: true }) : c.json({ error: "Session not found" }, 404);
   });
   app.get("/api/sessions/:id", (c) => {
     const session = sessionStore.getSession(c.req.param("id"));
@@ -152,41 +172,285 @@ export function createHubApp(): Hono {
   }
 
   app.post("/api/playground/send", async (c) => {
-    let body: { prompt?: string; sessionId?: string; bridgeUrl?: string; faultLatency?: number; faultDrop?: boolean; faultError?: string };
+    let body: {
+      clientType?: string;
+      transport?: string;
+      bridgeTarget?: string;
+      backend?: string;
+      prompt?: string;
+      runnerSessionId?: string;
+      record?: boolean;
+      recordFilename?: string;
+      sessionId?: string;
+      bridgeUrl?: string;
+      faultLatency?: number;
+      faultDrop?: boolean;
+      faultError?: string;
+    };
     try {
       body = (await c.req.json()) as typeof body;
     } catch {
       return c.json({ error: "Invalid JSON" }, 400);
     }
     const prompt = typeof body.prompt === "string" ? body.prompt : "";
-    const sessionId = typeof body.sessionId === "string" ? body.sessionId : undefined;
-    const bridgeUrl = (typeof body.bridgeUrl === "string" && body.bridgeUrl)
-      ? body.bridgeUrl.replace(/\/+$/, "")
-      : defaultBridgeUrl;
+    const clientType = body.clientType === "acp" ? "acp" : "copilot";
+    const transport = body.transport === "stdio" ? "stdio" : "tcp";
+    const bridgeTarget = (typeof body.bridgeTarget === "string" && body.bridgeTarget)
+      ? body.bridgeTarget.replace(/\/+$/, "")
+      : (typeof body.bridgeUrl === "string" && body.bridgeUrl)
+        ? body.bridgeUrl.replace(/\/+$/, "")
+        : defaultBridgeUrl;
+    const backend = typeof body.backend === "string" ? body.backend : undefined;
+    const runnerSessionId = typeof body.runnerSessionId === "string" && body.runnerSessionId
+      ? body.runnerSessionId
+      : genId("runner");
+
+    const runnerSession = runnerStore.createOrGet(runnerSessionId);
+
+    if (transport === "stdio") {
+      runnerStore.update(runnerSessionId, { status: "streaming" });
+      const hubBase = process.env.MESH_HUB_URL ?? `http://127.0.0.1:${process.env.PORT ?? 7337}`;
+      let bridgeCommand: { cmd: string; args: string[] } = { cmd: "node", args: [] };
+      try {
+        const { spawnPlaygroundRunnerStdio, getBridgeCommand } = await import("./playground/runner-stdio.js");
+        const resolvedBackend = backend ?? "";
+        bridgeCommand = getBridgeCommand(resolvedBackend);
+        const child = spawnPlaygroundRunnerStdio({
+          runnerSessionId,
+          hubUrl: hubBase,
+          backend: resolvedBackend,
+          clientType,
+          prompt,
+          record: body.record === true,
+          recordFilename: typeof body.recordFilename === "string" ? body.recordFilename : undefined,
+        });
+        runnerStore.update(runnerSessionId, { runnerPid: child.pid });
+        child.on("exit", () => {
+          runnerStore.update(runnerSessionId, { runnerPid: undefined });
+        });
+      } catch (err) {
+        runnerStore.update(runnerSessionId, { status: "error" });
+        return c.json({
+          runnerSessionId,
+          status: "error",
+          error: err instanceof Error ? err.message : "Failed to start runner",
+        }, 502);
+      }
+      return c.json({
+        runnerSessionId,
+        status: "streaming",
+        bridgeType: "stdio",
+        bridgeTarget: "stdio://local",
+        agentExec: bridgeCommand.cmd,
+        agentArgs: bridgeCommand.args,
+      });
+    }
+
+    if (backend) {
+      try {
+        const { setDefaultBackend } = await import("./governance/policy.js");
+        setDefaultBackend(backend);
+      } catch {
+        // ignore
+      }
+    }
+
     const faultHeaders: Record<string, string> = {};
     if (typeof body.faultLatency === "number" && body.faultLatency > 0) faultHeaders["X-Mesh-Fault-Latency"] = String(body.faultLatency);
     if (body.faultDrop === true) faultHeaders["X-Mesh-Fault-Drop"] = "1";
     if (typeof body.faultError === "string" && body.faultError) faultHeaders["X-Mesh-Fault-Error"] = body.faultError;
-    const rpc = {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "prompt",
-      params: { prompt, ...(sessionId ? { sessionId } : {}) },
-    };
+
+    const bridgeSessionId = runnerSession.bridgeSessionId ?? undefined;
     try {
-      const res = await proxyToBridge(bridgeUrl, rpc, faultHeaders);
-      const data = await res.json();
-      return c.json(data, res.status as 200 | 400 | 502);
-    } catch (err) {
+      runnerStore.update(runnerSessionId, { status: "streaming" });
+      let sid: string | undefined = bridgeSessionId;
+      if (clientType === "acp" && !bridgeSessionId) {
+        const newRpc = { jsonrpc: "2.0" as const, id: 1, method: "session/new" as const, params: { cwd: ".", mcpServers: [] as string[] } };
+        const resNew = await proxyToBridge(bridgeTarget, newRpc, faultHeaders);
+        const dataNew = (await resNew.json()) as { result?: { sessionId?: string }; error?: { message?: string } };
+        if (dataNew.error) {
+          runnerStore.update(runnerSessionId, { status: "error" });
+          return c.json(
+            {
+              runnerSessionId,
+              status: "error",
+              error: dataNew.error.message ?? "Bridge session/new failed",
+            },
+            502
+          );
+        }
+        sid = dataNew.result?.sessionId;
+        if (sid) runnerStore.update(runnerSessionId, { bridgeSessionId: sid });
+      }
+      const rpc: { jsonrpc: string; id: number; method: string; params: Record<string, unknown> } =
+        clientType === "acp"
+          ? {
+              jsonrpc: "2.0",
+              id: 2,
+              method: "session/prompt",
+              params: { sessionId: sid ?? bridgeSessionId, prompt: [{ type: "text", text: prompt }] },
+            }
+          : {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "prompt",
+              params: { prompt, ...(sid ? { sessionId: sid } : {}) },
+            };
+      const res = await proxyToBridge(bridgeTarget, rpc, faultHeaders);
+      const data = (await res.json()) as { result?: { sessionId?: string }; error?: { message?: string } };
+      if (data.error) {
+        runnerStore.update(runnerSessionId, { status: "error" });
+        return c.json(
+          {
+            runnerSessionId,
+            status: "error",
+            error: data.error.message ?? "Bridge error",
+          },
+          502
+        );
+      }
+      const resultSessionId = data.result?.sessionId ?? sid;
+      if (resultSessionId && !runnerSession.bridgeSessionId) runnerStore.update(runnerSessionId, { bridgeSessionId: resultSessionId });
+      runnerStore.update(runnerSessionId, { status: "connected", bridgeTarget });
       return c.json({
-        jsonrpc: "2.0",
-        id: 1,
-        error: {
-          code: -32603,
-          message: err instanceof Error ? err.message : "Bridge request failed",
-        },
+        runnerSessionId,
+        status: "connected",
+        sessionId: resultSessionId ?? runnerSession.bridgeSessionId,
+        bridgeType: "tcp",
+        bridgeTarget,
+        agentExec: null,
+        agentArgs: [],
+      });
+    } catch (err) {
+      runnerStore.update(runnerSessionId, { status: "error" });
+      return c.json({
+        runnerSessionId,
+        status: "error",
+        error: err instanceof Error ? err.message : "Bridge request failed",
       }, 502);
     }
+  });
+
+  app.get("/api/playground/frames/:runnerSessionId", (c) => {
+    const runnerSessionId = c.req.param("runnerSessionId");
+    const runnerSession = runnerStore.get(runnerSessionId);
+    if (!runnerSession) return c.json({ frames: [] });
+    if (runnerSession.bridgeSessionId) {
+      const frames = sessionStore.getFrames(runnerSession.bridgeSessionId);
+      return c.json({ frames });
+    }
+    return c.json({ frames: runnerSession.frames });
+  });
+
+  app.post("/api/playground/session", async (c) => {
+    let body: { clientType?: string; transport?: string; bridgeTarget?: string; backend?: string };
+    try {
+      body = (await c.req.json().catch(() => ({}))) as typeof body;
+    } catch {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const runnerSessionId = genId("runner");
+    const transport = body.transport === "stdio" ? "stdio" : "tcp";
+    const bridgeTarget =
+      typeof body.bridgeTarget === "string" && body.bridgeTarget
+        ? body.bridgeTarget.replace(/\/+$/, "")
+        : defaultBridgeUrl;
+    runnerStore.createOrGet(runnerSessionId);
+    const backend = typeof body.backend === "string" ? body.backend : undefined;
+    if (backend) {
+      try {
+        const { setDefaultBackend } = await import("./governance/policy.js");
+        setDefaultBackend(backend);
+      } catch {
+        // ignore
+      }
+    }
+    let agentExec: string | null = null;
+    let agentArgs: string[] = [];
+    if (transport === "stdio") {
+      try {
+        const { getBridgeCommand } = await import("./playground/runner-stdio.js");
+        const bridgeCommand = getBridgeCommand(backend ?? "");
+        agentExec = bridgeCommand.cmd;
+        agentArgs = bridgeCommand.args;
+      } catch {
+        // Metadata-only; keep session creation successful.
+      }
+    }
+    return c.json({
+      runnerSessionId,
+      bridgeType: transport,
+      bridgeTarget: transport === "tcp" ? bridgeTarget : "stdio://local",
+      agentExec,
+      agentArgs,
+    });
+  });
+
+  app.post("/api/playground/control", async (c) => {
+    let body: { runnerSessionId?: string; action?: string };
+    try {
+      body = (await c.req.json()) as typeof body;
+    } catch {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const runnerSessionId = typeof body.runnerSessionId === "string" ? body.runnerSessionId : "";
+    const action = body.action === "kill" ? "kill" : body.action === "reset" ? "reset" : body.action === "cancel" ? "cancel" : undefined;
+    if (!runnerSessionId || !action) {
+      return c.json({ error: "runnerSessionId and action (cancel|kill|reset) required" }, 400);
+    }
+    const runnerSession = runnerStore.get(runnerSessionId);
+    if (!runnerSession) return c.json({ error: "Runner session not found" }, 404);
+    if (action === "reset") {
+      if (runnerSession.runnerPid) {
+        try {
+          process.kill(runnerSession.runnerPid, "SIGTERM");
+        } catch {
+          // ignore
+        }
+      }
+      runnerStore.reset(runnerSessionId);
+      return c.json({ ok: true, action: "reset" });
+    }
+    if (action === "kill" && runnerSession.bridgeSessionId) {
+      const ok = sessionStore.killSession(runnerSession.bridgeSessionId);
+      if (ok) markKilled(runnerSession.bridgeSessionId);
+      runnerStore.update(runnerSessionId, { status: "error" });
+      return c.json({ ok: true, action: "kill" });
+    }
+    if (action === "cancel" && runnerSession.bridgeSessionId) {
+      const cancelBridgeUrl = runnerSession.bridgeTarget ?? defaultBridgeUrl;
+      try {
+        await fetch(`${cancelBridgeUrl}/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "cancel",
+            params: { sessionId: runnerSession.bridgeSessionId },
+          }),
+        });
+      } catch {
+        // ignore
+      }
+      runnerStore.update(runnerSessionId, { status: "connected" });
+      return c.json({ ok: true, action: "cancel" });
+    }
+    return c.json({ error: "Invalid action" }, 400);
+  });
+
+  app.post("/api/playground/runner/:runnerSessionId/frames", async (c) => {
+    const runnerSessionId = c.req.param("runnerSessionId");
+    let body: { type?: string; payload?: unknown };
+    try {
+      body = (await c.req.json().catch(() => ({}))) as typeof body;
+    } catch {
+      return c.json({ error: "Invalid JSON" }, 400);
+    }
+    const type = typeof body.type === "string" ? body.type : "raw";
+    runnerStore.createOrGet(runnerSessionId);
+    const frame = runnerStore.addFrame(runnerSessionId, type, body.payload);
+    return frame ? c.json({ ok: true }) : c.json({ error: "Not found" }, 404);
   });
 
   app.post("/api/playground/rpc", async (c) => {

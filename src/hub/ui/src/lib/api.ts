@@ -130,6 +130,106 @@ export interface PlaygroundSendResult {
   error?: { code: number; message: string; data?: unknown };
 }
 
+/** Runner-based playground send (server-side Runner; TCP or STDIO to Bridge). */
+export interface PlaygroundRunnerSendParams {
+  clientType: "copilot" | "acp";
+  transport: "tcp" | "stdio";
+  bridgeTarget?: string;
+  backend: string;
+  prompt: string;
+  runnerSessionId?: string;
+  record?: boolean;
+  recordFilename?: string;
+  faultLatency?: number;
+  faultDrop?: boolean;
+  faultError?: string;
+}
+
+export interface PlaygroundRunnerSendResult {
+  runnerSessionId: string;
+  status: "idle" | "connected" | "streaming" | "error";
+  sessionId?: string;
+  error?: string;
+  bridgeType?: "tcp" | "stdio";
+  bridgeTarget?: string;
+  agentExec?: string | null;
+  agentArgs?: string[];
+}
+
+export async function sendPlaygroundRunner(
+  params: PlaygroundRunnerSendParams
+): Promise<PlaygroundRunnerSendResult> {
+  const res = await fetch(`${API_BASE}/playground/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  const data = (await res.json()) as PlaygroundRunnerSendResult & { error?: string };
+  if (!res.ok) throw new Error(data?.error ?? `Request failed: ${res.status}`);
+  return data;
+}
+
+export interface CreatePlaygroundSessionParams {
+  clientType?: "copilot" | "acp";
+  transport?: "tcp" | "stdio";
+  bridgeTarget?: string;
+  backend?: string;
+}
+
+export async function createPlaygroundSession(
+  params: CreatePlaygroundSessionParams
+): Promise<{
+  runnerSessionId: string;
+  bridgeType?: "tcp" | "stdio";
+  bridgeTarget?: string;
+  agentExec?: string | null;
+  agentArgs?: string[];
+}> {
+  const res = await fetch(`${API_BASE}/playground/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  const data = (await res.json()) as {
+    runnerSessionId?: string;
+    bridgeType?: "tcp" | "stdio";
+    bridgeTarget?: string;
+    agentExec?: string | null;
+    agentArgs?: string[];
+    error?: string;
+  };
+  if (!res.ok) throw new Error(data?.error ?? `Create session failed: ${res.status}`);
+  if (!data.runnerSessionId) throw new Error("No runnerSessionId in response");
+  return {
+    runnerSessionId: data.runnerSessionId,
+    bridgeType: data.bridgeType,
+    bridgeTarget: data.bridgeTarget,
+    agentExec: data.agentExec,
+    agentArgs: Array.isArray(data.agentArgs) ? data.agentArgs : [],
+  };
+}
+
+export async function fetchPlaygroundFrames(runnerSessionId: string): Promise<Frame[]> {
+  const res = await fetch(`${API_BASE}/playground/frames/${runnerSessionId}`);
+  if (!res.ok) return [];
+  const data = (await res.json()) as { frames?: Frame[] };
+  return Array.isArray(data?.frames) ? data.frames : [];
+}
+
+export async function playgroundControl(
+  runnerSessionId: string,
+  action: "cancel" | "kill" | "reset"
+): Promise<{ ok: boolean; action?: string }> {
+  const res = await fetch(`${API_BASE}/playground/control`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runnerSessionId, action }),
+  });
+  const data = (await res.json()) as { ok?: boolean; action?: string; error?: string };
+  if (!res.ok) throw new Error(data?.error ?? `Control failed: ${res.status}`);
+  return { ok: data?.ok === true, action: data?.action };
+}
+
 export async function sendPlaygroundPrompt(
   params: PlaygroundSendParams
 ): Promise<PlaygroundSendResult> {
