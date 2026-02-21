@@ -11,6 +11,7 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "../../../dist/ui"),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 600,
   },
   resolve: {
     alias: {

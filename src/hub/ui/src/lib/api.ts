@@ -80,7 +80,7 @@ export interface PlaygroundSendResult {
 export interface PlaygroundRunnerSendParams {
   /** Agent command (e.g. "meshaway"). */
   agentCommand?: string;
-  /** Agent args (e.g. ["bridge", "--agent", "gemini-cli"]). */
+  /** Agent args (e.g. ["bridge", "--agent", "gemini"]). */
   agentArgs?: string[];
   prompt: string;
   runnerSessionId?: string;

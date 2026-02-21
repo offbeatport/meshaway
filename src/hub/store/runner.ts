@@ -1,5 +1,5 @@
 import { genId } from "../../shared/ids.js";
-import type { Frame } from "./memory.js";
+import type { Frame } from "../../shared/session/index.js";
 
 export type RunnerStatus = "idle" | "connected" | "streaming" | "error";
 
@@ -16,7 +16,7 @@ export interface RunnerSession {
   runnerPid?: number;
   /** Agent command for STDIO (e.g. "meshaway"). */
   agentCommand?: string;
-  /** Agent args for STDIO (e.g. ["bridge", "--agent", "gemini-cli"]). */
+  /** Agent args for STDIO (e.g. ["bridge", "--agent", "gemini"]). */
   agentArgs?: string[];
 }
 

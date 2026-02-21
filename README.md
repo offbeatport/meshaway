@@ -29,7 +29,7 @@ Then:
 
 ## Environment
 
-- `MESH_AGENT` — Agent specifier (`gemini-cli`, `openai-compat:http://127.0.0.1:11434/v1`)
+- `MESH_AGENT` — Agent specifier (`gemini`, `openai-compat:http://127.0.0.1:11434/v1`)
 - `MESH_LISTEN` — Bridge listen address
 - `MESH_HUB` — Hub URL (when bridge connects)
 - `MESH_HUB_LISTEN` — Hub listen address

@@ -16,11 +16,3 @@ export function exit(code: number, message?: string): never {
   }
   process.exit(code);
 }
-
-/** Thrown when the agent process (e.g. gemini-cli) fails to start or respond. Used to exit bridge with a specific error. */
-export class AgentStartError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AgentStartError";
-  }
-}

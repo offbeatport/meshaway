@@ -70,7 +70,7 @@ export function createProgram(): Command {
         "  meshaway doctor    Run environment checks",
         "Examples:",
         "  meshaway hub --listen 127.0.0.1:7337   # Hub on custom port",
-        "  meshaway bridge --agent gemini-cli # Bridge for Copilot/ACP\n",
+        "  meshaway bridge --agent gemini # Bridge for Copilot/ACP\n",
         "  meshaway --help for options.  meshaway <command> --help for command help.",
       ].join("\n");
       getLogger().info(help);
@@ -125,7 +125,7 @@ export function createProgram(): Command {
     .description("Start Bridge (stdio)")
     .allowUnknownOption(true)
     .allowExcessArguments(true)
-    .option("--agent <specifier>", "Agent command specifier (e.g. gemini-cli)")
+    .option("--agent <specifier>", "Agent command specifier (e.g. gemini)")
     .option("--agent-args <args...>", "Extra arguments for the agent")
     .option("--log-level <level>", "Log level", "info")
     .option("--log-format <format>", "Log format", "text")
@@ -160,7 +160,7 @@ export function createProgram(): Command {
       }
 
       log.info("Fix:");
-      log.info("  - ACP agent:  meshaway bridge --agent gemini-cli");
+      log.info("  - ACP agent:  meshaway bridge --agent gemini");
       log.info("  - Or set:      MESH_AGENT=...");
       log.info("───────────────────────────────────────────────────────────────");
 

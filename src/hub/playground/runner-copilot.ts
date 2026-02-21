@@ -19,6 +19,23 @@ function extractAgentFromArgs(args: string[]): string {
   return "";
 }
 
+/** True when the current process is the meshaway binary (native or node running meshaway.mjs). */
+function isMeshawayProcess(): boolean {
+  const exe = process.execPath;
+  const argv0 = process.argv[0] ?? "";
+  return exe.endsWith("meshaway") || argv0.endsWith("meshaway") || exe.includes("meshaway.mjs");
+}
+
+/** When process.execPath is node (e.g. packaged native binary), resolve the real meshaway binary in cwd. */
+function meshawayBinaryInCwd(): string | null {
+  const cwd = process.cwd();
+  const unix = join(cwd, "meshaway");
+  if (existsSync(unix)) return unix;
+  const win = join(cwd, "meshaway.exe");
+  if (existsSync(win)) return win;
+  return null;
+}
+
 export function resolveBridgeCommand(
   agentCommand: string,
   agentArgs: string[]
@@ -26,21 +43,23 @@ export function resolveBridgeCommand(
 
   const wantMeshaway = !agentCommand || agentCommand === "meshaway";
   const agent = extractAgentFromArgs(agentArgs);
-  const cwd = process.cwd();
-  const script = join(cwd, "src", "cli.ts");
-  const built = join(cwd, "dist", "node", "meshaway.mjs");
+  const args = agentArgs.length ? agentArgs : ["bridge", "--agent", agent || "gemini"];
+
   if (wantMeshaway) {
-    const args = agentArgs.length ? agentArgs : ["bridge", "--agent", agent || "gemini-cli"];
+    if (isMeshawayProcess()) {
+      return { cmd: process.execPath, args };
+    }
+    const cwd = process.cwd();
+    const script = join(cwd, "src", "cli.ts");
     if (existsSync(script)) {
       const tsx = join(cwd, "node_modules", ".bin", "tsx");
       const runner = existsSync(tsx) ? tsx : "npx";
       const runnerArgs = existsSync(tsx) ? [script] : ["tsx", script];
       return { cmd: runner, args: [...runnerArgs, ...args] };
     }
-    if (existsSync(built)) {
-      return { cmd: process.execPath, args: [built, ...args] };
-    }
-    return { cmd: process.execPath, args: [built, "bridge", "--agent", agent || "gemini-cli"] };
+    const binary = meshawayBinaryInCwd();
+    if (binary) return { cmd: binary, args };
+    return { cmd: process.execPath, args };
   }
   return { cmd: agentCommand, args: agentArgs };
 }

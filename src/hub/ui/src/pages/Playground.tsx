@@ -1,13 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "react-router-dom";
 import { AppSelect } from "@/components/AppSelect";
 import { SyntaxHighlight } from "@/components/SyntaxHighlight";
 import {
   Send,
   Loader2,
-  CheckCircle,
   AlertCircle,
-  ExternalLink,
   Layers,
   Play,
   ChevronDown,
@@ -95,10 +92,10 @@ const PIPELINE_OPTIONS: {
   part3: string;
   /** Agent command (e.g. "meshaway"). User specifies CLI path locally. */
   agentCommand: string;
-  /** Agent args to spawn bridge (e.g. ["bridge", "--agent", "gemini-cli"]). */
+  /** Agent args to spawn bridge (e.g. ["bridge", "--agent", "gemini"]). */
   agentArgs: string[];
 }[] = [
-    { value: "copilot-stdio-gemini", label: "Github Copilot SDK > stdio: Bridge >  Gemini", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: " Gemini", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "gemini-cli"] },
+    { value: "copilot-stdio-gemini", label: "Github Copilot SDK > stdio: Bridge >  Gemini", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: " Gemini", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "gemini"] },
     { value: "copilot-stdio-claude", label: "Github Copilot SDK > stdio: Bridge >  Claude Code", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: " Claude Code", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "claude"] },
     { value: "copilot-stdio-opencode", label: "Github Copilot SDK > stdio: Bridge >  OpenCode", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: " OpenCode", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "opencode"] },
   ];
@@ -228,8 +225,7 @@ export function Playground() {
 
   useEffect(() => {
     resetRunner();
-    handleConnect();
-  }, [selectedPipeline, resetRunner, handleConnect]);
+  }, [selectedPipeline, resetRunner]);
 
   const loadFrames = useCallback(async () => {
     if (!activeRunnerSessionId) return;
@@ -280,9 +276,6 @@ export function Playground() {
     }
   };
 
-
-
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="mb-6">
@@ -308,8 +301,8 @@ export function Playground() {
               onValueChange={handlePipelineChange}
               items={PIPELINE_OPTIONS.map((p) => ({
                 value: p.value,
-                label: `${p.part1} → Meshaway bridge → ${p.part3}`,
-                mutedSegment: p.part3.startsWith(" ") ? " → Meshaway bridge →  " : undefined,
+                label: `${p.part1} → Meshaway Bridge → ${p.part3}`,
+                mutedSegment: p.part3.startsWith(" ") ? " → Meshaway Bridge →  " : undefined,
               }))}
               placeholder="Select a pipeline configuration..."
             />
@@ -358,16 +351,22 @@ export function Playground() {
                 <button
                   type="button"
                   onClick={handleConnect}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-zinc-200 hover:bg-zinc-700"
+                  disabled={connectionStatus === "Connecting..."}
+                  className={
+                    connectionStatus === "Connected"
+                      ? "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-zinc-200 hover:bg-zinc-700"
+                      : "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 disabled:opacity-50 font-medium"
+                  }
                 >
                   <Plug className="h-3.5 w-3.5" />
-                  Reconnect
+                  {connectionStatus === "Connected" ? "Reconnect" : "Connect"}
                 </button>
                 <span className="text-zinc-500 px-1" aria-hidden>/</span>
                 <button
                   type="button"
                   onClick={resetRunner}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-zinc-200 hover:bg-zinc-700"
+                  disabled={connectionStatus !== "Connected" && connectionStatus !== "Connecting..."}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-zinc-200 border border-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <Unplug className="h-3.5 w-3.5" />
                   Disconnect
@@ -394,6 +393,11 @@ export function Playground() {
                   {displaySessionErrorSource === "agent" ? "Agent error" : "Bridge error"}
                 </p>
               )}
+              {displaySessionErrorSource === "agent" && (
+                <p className="text-sm text-amber-200/90">
+                  The agent failed to start.
+                </p>
+              )}
               <p className="text-sm text-amber-200/90 whitespace-pre-wrap break-words font-mono">
                 {displaySessionError}
               </p>
@@ -402,8 +406,11 @@ export function Playground() {
         )}
       </section>
 
-      {/* Message + Send + Response */}
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
+      {/* Message + Send + Response (only when connected) */}
+      <section
+        className={`rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4 ${hasSessionCreated ? "" : "opacity-60 pointer-events-none"}`}
+        aria-disabled={!hasSessionCreated}
+      >
         <h2 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
           <Send className="h-4 w-4" />
           Message
@@ -412,65 +419,37 @@ export function Playground() {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !sending && prompt.trim()) {
+            if (hasSessionCreated && (e.metaKey || e.ctrlKey) && e.key === "Enter" && !sending && prompt.trim()) {
               e.preventDefault();
               void handleSend();
             }
           }}
-          placeholder="e.g. What is 2+2?"
+          placeholder={hasSessionCreated ? "e.g. What is 2+2?" : "Connect to enable"}
           rows={3}
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-900/80 px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30 resize-y font-mono text-sm"
-          disabled={sending}
+          className="w-full rounded-lg border border-zinc-700 bg-zinc-900/80 px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30 resize-y font-mono text-sm disabled:opacity-70"
+          disabled={sending || !hasSessionCreated}
         />
         <div className="flex items-center justify-end flex-wrap gap-2">
           <button
             type="button"
             onClick={handleSend}
-            disabled={sending || !prompt.trim()}
+            disabled={sending || !prompt.trim() || !hasSessionCreated}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 disabled:opacity-50 font-medium text-sm"
           >
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             {sending ? "Sending…" : "Send"}
           </button>
         </div>
-        <p className="text-[11px] text-zinc-500">Tip: press Cmd/Ctrl + Enter to send.</p>
-        {lastResult && (
-          <div
-            className={`rounded-lg border p-4 ${lastResult.error
-              ? "border-amber-500/30 bg-amber-500/5"
-              : "border-sky-500/20 bg-sky-500/5"
-              }`}
-          >
-            {lastResult.error ? (
-              <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-amber-200">Error</p>
-                  <p className="mt-1 text-sm text-zinc-400">{lastResult.error}</p>
-                </div>
+        <p className="text-[11px] text-zinc-500">Tip: press Cmd/Ctrl + Enter to send. Response and request appear in the Console below.</p>
+        {lastResult?.error && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-200">Error</p>
+                <p className="mt-1 text-sm text-zinc-400">{lastResult.error}</p>
               </div>
-            ) : (
-              <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-sky-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-sky-200">OK</p>
-                  {lastResult.sessionId && (
-                    <Link
-                      to={`/sessions/${lastResult.sessionId}`}
-                      className="mt-1 inline-flex items-center gap-1.5 text-sm text-sky-400 hover:text-sky-300"
-                    >
-                      View session <ExternalLink className="h-3.5 w-3.5" />
-                    </Link>
-                  )}
-                </div>
-              </div>
-            )}
-            <details className="mt-3">
-              <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400">Raw response</summary>
-              <pre className="mt-2 p-3 rounded bg-zinc-900/80 text-xs text-zinc-400 overflow-auto max-h-40">
-                {JSON.stringify(lastResult.raw, null, 2)}
-              </pre>
-            </details>
+            </div>
           </div>
         )}
       </section>
@@ -493,17 +472,19 @@ export function Playground() {
         </button>
         {framesOpen && (
           <div className="mt-3 space-y-3">
-            <input
-              type="text"
-              value={frameSearch}
-              onChange={(e) => setFrameSearch(e.target.value)}
-              placeholder="Search"
-              className="w-full max-w-56 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 font-mono"
-            />
+            <div className="flex justify-end">
+              <input
+                type="text"
+                value={frameSearch}
+                onChange={(e) => setFrameSearch(e.target.value)}
+                placeholder="Search"
+                className="w-full max-w-56 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 font-mono"
+              />
+            </div>
             {frames.length === 0 ? (
               <p className="text-xs text-zinc-500 font-mono">No log entries yet.</p>
             ) : (
-              <div className="max-h-72 overflow-auto font-mono text-xs text-zinc-300">
+              <div className="min-h-[756px] overflow-auto font-mono text-xs text-zinc-300">
                 {frames
                   .filter((f) => !frameSearch || `${f.type} ${JSON.stringify(f.payload)}`.toLowerCase().includes(frameSearch.toLowerCase()))
                   .map((f) => (

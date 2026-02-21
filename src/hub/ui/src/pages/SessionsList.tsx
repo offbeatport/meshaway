@@ -6,7 +6,6 @@ import {
   Terminal,
   AlertCircle,
   Download,
-  RotateCcw,
   BarChart3,
   ChevronDown,
   ChevronUp,
@@ -68,7 +67,6 @@ export function SessionsList() {
   const [sortAsc, setSortAsc] = useState(false);
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [metricsOpen, setMetricsOpen] = useState(true);
-  const [replayOpen, setReplayOpen] = useState(true);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
@@ -375,7 +373,7 @@ export function SessionsList() {
                 <th className="text-right py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Latency</th>
                 <th className="text-right py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Tokens</th>
                 <th className="text-left py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Agent</th>
-                <th className="text-left py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Replay</th>
+                <th className="text-left py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -430,26 +428,15 @@ export function SessionsList() {
                       {(s as Session & { agent?: string }).agent ?? "—"}
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={getSessionExportUrl(s.id)}
-                          download={`session-${s.id}.jsonl`}
-                          className="inline-flex items-center gap-1 text-xs text-sky-400/90 hover:text-sky-400"
-                          title="Export JSONL"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          Export
-                        </a>
-                        <Link
-                          to="/playground"
-                          state={{ replaySessionId: s.id }}
-                          className="inline-flex items-center gap-1 text-xs text-sky-400/90 hover:text-sky-400"
-                          title="Replay in Playground"
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                          Replay
-                        </Link>
-                      </div>
+                      <a
+                        href={getSessionExportUrl(s.id)}
+                        download={`session-${s.id}.jsonl`}
+                        className="inline-flex items-center gap-1 text-xs text-sky-400/90 hover:text-sky-400"
+                        title="Export JSONL"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Export
+                      </a>
                     </td>
                   </tr>
                 ))
@@ -459,25 +446,6 @@ export function SessionsList() {
         </div>
       </div>
 
-      {/* Replay section */}
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
-        <button
-          type="button"
-          onClick={() => setReplayOpen((o) => !o)}
-          className="w-full flex items-center justify-between text-sm font-semibold text-zinc-300"
-        >
-          <span className="flex items-center gap-2">
-            <RotateCcw className="h-4 w-4 text-sky-400/80" />
-            Replay
-          </span>
-          {replayOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-        </button>
-        {replayOpen && (
-          <p className="mt-3 text-sm text-zinc-500">
-            Export any session as JSONL (Export link in the table), then use the Playground → Record/Replay section to replay requests through the bridge for deterministic testing.
-          </p>
-        )}
-      </section>
     </div>
   );
 }

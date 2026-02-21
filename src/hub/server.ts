@@ -191,7 +191,7 @@ export function createHubApp(): Hono {
     return c.json({ frames });
   });
 
-  const defaultCliArgs = ["bridge", "--agent", "gemini-cli"];
+  const defaultCliArgs = ["bridge", "--agent", "gemini"];
 
   app.post("/api/playground/session", async (c) => {
 
