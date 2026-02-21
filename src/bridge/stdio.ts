@@ -4,7 +4,6 @@
  */
 
 import { BridgeEngine } from "./engine.js";
-import { EXIT } from "../shared/errors.js";
 
 const HEADER_END = "\r\n\r\n";
 
@@ -25,9 +24,7 @@ export async function runStdioBridge(agent: string, agentArgs?: string[]): Promi
   try {
     await engine.startAgent();
   } catch (err) {
-      const message = err instanceof Error ? err.message : "Agent failed to start";
-    process.stderr.write(`Agent: ${message}\n`);
-    process.exit(EXIT.AGENT_FAILURE);
+    throw new Error(err instanceof Error ? err.message : "Agent failed to start");
   }
   let stdinClosed = false;
   let buffer = Buffer.alloc(0);

@@ -11,7 +11,6 @@ import { DEFAULT_HUB_LISTEN } from "./shared/constants.js";
 import { parseListen } from "./shared/net.js";
 import { getLogger, initLogger, LogLevel, LogFormat } from "./shared/logging.js";
 import { getEnv } from "./shared/env.js";
-import { EXIT, exit } from "./shared/errors.js";
 import { startHub } from "./hub/server.js";
 import { runStdioBridge } from "./bridge/stdio.js";
 
@@ -108,15 +107,15 @@ export function createProgram(): Command {
 
         await new Promise<void>((_, reject) => {
           process.on("SIGINT", () =>
-            handle.close().then(() => process.exit(EXIT.SUCCESS)).catch(reject)
+            handle.close().then(() => process.exit(0)).catch(reject)
           );
           process.on("SIGTERM", () =>
-            handle.close().then(() => process.exit(EXIT.SUCCESS)).catch(reject)
+            handle.close().then(() => process.exit(0)).catch(reject)
           );
         });
       } catch (err) {
         getLogger().error(String(err));
-        exit(EXIT.SERVER_FAILURE);
+        process.exit(1);
       }
     });
 
@@ -138,7 +137,7 @@ export function createProgram(): Command {
         await runStdioBridge(opts.agent as string, opts.agentArgs as string[]);
       } catch (err) {
         getLogger().error(String(err));
-        exit(EXIT.SERVER_FAILURE);
+        process.exit(1);
       }
     });
 

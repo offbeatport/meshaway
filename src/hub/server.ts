@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { EXIT, exit } from "../shared/errors.js";
 import { getLogger } from "../shared/logging.js";
 import { genId } from "../shared/ids.js";
 import { sessionStore } from "./store/memory.js";
@@ -347,7 +346,7 @@ export async function startHub(options: HubServeOptions): Promise<HubHandle> {
         { err, host, port },
         `Cannot listen on ${host}:${port} (EADDRINUSE). Fix: choose a different port with --listen ${host}:<port>`
       );
-      exit(EXIT.SERVER_FAILURE);
+      process.exit(1);
     }
     throw err;
   });
