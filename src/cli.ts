@@ -9,7 +9,7 @@ import { readFileSync, existsSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_HUB_LISTEN } from "./shared/constants.js";
 import { parseListen } from "./shared/net.js";
-import { getLogger, initLogger, LogLevel, LogFormat } from "./shared/logging.js";
+import { log, initLogger, LogLevel, LogFormat } from "./shared/logging.js";
 import { getEnv } from "./shared/env.js";
 import { startHub } from "./hub/server.js";
 import { runStdioBridge } from "./bridge/stdio.js";
@@ -66,13 +66,12 @@ export function createProgram(): Command {
         "Usage:",
         "  meshaway hub       Start Hub (monitor sessions, playground)",
         "  meshaway bridge    Start Bridge in stdio mode",
-        "  meshaway doctor    Run environment checks",
         "Examples:",
         "  meshaway hub --listen 127.0.0.1:7337   # Hub on custom port",
         "  meshaway bridge --agent gemini # Bridge for Copilot/ACP\n",
         "  meshaway --help for options.  meshaway <command> --help for command help.",
       ].join("\n");
-      getLogger().info(help);
+      log.info(help);
     });
 
   program
@@ -99,8 +98,8 @@ export function createProgram(): Command {
       try {
         const handle = await startHub({ host, port });
         const url = `http://${handle.host}:${handle.port}`;
-        getLogger().info(`Hub UI:      ${url}`);
-        getLogger().info("Press Ctrl+C to stop.");
+        log.info(`Hub UI:      ${url}`);
+        log.info("Press Ctrl+C to stop.");
         if (opts.open !== false && !process.env.MESH_NO_OPEN_BROWSER) {
           openBrowser(url);
         }
@@ -114,7 +113,7 @@ export function createProgram(): Command {
           );
         });
       } catch (err) {
-        getLogger().error(String(err));
+        log.error(String(err));
         process.exit(1);
       }
     });
@@ -136,33 +135,9 @@ export function createProgram(): Command {
         );
         await runStdioBridge(opts.agent as string, opts.agentArgs as string[]);
       } catch (err) {
-        getLogger().error(String(err));
+        log.error(String(err));
         process.exit(1);
       }
-    });
-
-  program
-    .command("doctor")
-    .description("Environment checks and fixes")
-    .option("--data-dir <path>", "Data directory", "~/.meshaway")
-    .action(async (opts: { dataDir?: string }) => {
-
-      const log = getLogger();
-      log.info("Meshaway doctor");
-      log.info("───────────────────────────────────────────────────────────────");
-
-      const agent = getEnv("AGENT");
-      if (agent) {
-        log.info(`Agent (MESH_AGENT): ${agent}`);
-      } else {
-        log.info("Agent: not set (MESH_AGENT)");
-      }
-
-      log.info("Fix:");
-      log.info("  - ACP agent:  meshaway bridge --agent gemini");
-      log.info("  - Or set:      MESH_AGENT=...");
-      log.info("───────────────────────────────────────────────────────────────");
-
     });
 
   return program;
