@@ -5,6 +5,9 @@ import pinoPretty from "pino-pretty";
 export type LogLevel = "error" | "warn" | "info" | "debug";
 export type LogFormat = "text" | "json" | "plain";
 
+export const LOG_LEVELS: readonly LogLevel[] = ["error", "warn", "info", "debug"];
+export const LOG_FORMATS: readonly LogFormat[] = ["text", "json", "plain"];
+
 export function redactSecrets(input: string): string {
   return input
     .replace(/\bsk-[A-Za-z0-9_-]{16,}\b/g, "[REDACTED]")
@@ -30,10 +33,8 @@ export function maskSensitiveObject<T>(value: T): T {
   }
 }
 
-const LEVELS: LogLevel[] = ["error", "warn", "info", "debug"];
-
 function isValidLevel(s: string): s is LogLevel {
-  return LEVELS.includes(s as LogLevel);
+  return (LOG_LEVELS as readonly string[]).includes(s);
 }
 
 function redactingStderr(): Writable {
@@ -104,8 +105,15 @@ export function getLogger(): pino.Logger {
   return ensureLogger();
 }
 
+export const log = {
+  info: (...args: Parameters<pino.Logger["info"]>) => ensureLogger().info(...args),
+  warn: (...args: Parameters<pino.Logger["warn"]>) => ensureLogger().warn(...args),
+  error: (...args: Parameters<pino.Logger["error"]>) => ensureLogger().error(...args),
+  debug: (...args: Parameters<pino.Logger["debug"]>) => ensureLogger().debug(...args),
+  trace: (...args: Parameters<pino.Logger["trace"]>) => ensureLogger().trace(...args),
+};
+
 export function safeLog(message: string, context?: unknown): void {
-  const log = ensureLogger();
   if (context === undefined) log.info(message);
   else log.info(maskSensitiveObject(context) as object, message);
 }

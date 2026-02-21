@@ -147,5 +147,14 @@ export async function createSqliteSessionStore(dbPath: string): Promise<SessionS
       db.prepare("UPDATE sessions SET status = ?, updatedAt = ? WHERE id = ?").run("killed", Date.now(), id);
       return true;
     },
+
+    resetRunnerSession(id: string): Session | undefined {
+      const row = getSessionRow.get({ id });
+      if (!row) return undefined;
+      const now = Date.now();
+      db.prepare("DELETE FROM frames WHERE sessionId = ?").run(id);
+      db.prepare("UPDATE sessions SET updatedAt = ? WHERE id = ?").run(now, id);
+      return rowToSession({ ...row, updatedAt: now });
+    },
   };
 }

@@ -77,5 +77,13 @@ export function createInMemorySessionStore(): SessionStore {
       session.updatedAt = Date.now();
       return true;
     },
+
+    resetRunnerSession(id: string): Session | undefined {
+      const session = sessions.get(id);
+      if (!session) return undefined;
+      session.frames = [];
+      session.updatedAt = Date.now();
+      return session;
+    },
   };
 }

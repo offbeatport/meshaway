@@ -1,4 +1,4 @@
-import type { AcpAgentClient } from "../../acp-rpc-client.js";
+import type { AcpAgentClient } from "../../agents/acp.js";
 
 /** Context the engine passes to each client adapter. */
 export interface ClientAdapterContext {

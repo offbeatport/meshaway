@@ -3,6 +3,8 @@
  * stderr = logs only.
  */
 
+import { jsonRpcError } from "../protocols/jsonrpc/response.js";
+import type { BridgeClientKind } from "./clients/index.js";
 import { BridgeEngine } from "./engine.js";
 
 const HEADER_END = "\r\n\r\n";
@@ -19,8 +21,12 @@ function readContentLengthHeader(header: string): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
-export async function runStdioBridge(agent: string, agentArgs?: string[]): Promise<void> {
-  const engine = new BridgeEngine({ agent, agentArgs });
+export async function runStdioBridge(
+  client: BridgeClientKind,
+  agent: string,
+  agentArgs: string[] = []
+): Promise<void> {
+  const engine = new BridgeEngine({ client, agent, agentArgs });
   try {
     await engine.startAgent();
   } catch (err) {
@@ -50,11 +56,7 @@ export async function runStdioBridge(agent: string, agentArgs?: string[]): Promi
       try {
         body = JSON.parse(bodyBytes.toString("utf8")) as unknown;
       } catch {
-        writeResponse({
-          jsonrpc: "2.0",
-          id: null,
-          error: { code: -32700, message: "Parse error", data: { body: bodyBytes.toString("utf8").slice(0, 80) } },
-        });
+        writeResponse(jsonRpcError(null, -32700, "Parse error", { body: bodyBytes.toString("utf8").slice(0, 80) }));
         if (stdinClosed) engine.close();
         continue;
       }

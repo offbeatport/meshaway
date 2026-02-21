@@ -3,10 +3,9 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { getLogger } from "../shared/logging.js";
+import { log } from "../shared/logging.js";
 import { genId } from "../shared/ids.js";
 import { sessionStore } from "./store/memory.js";
-import { runnerStore } from "./store/runner.js";
 import { getDefaultAgent } from "./governance/policy.js";
 import { markKilled } from "../bridge/interceptors/killswitch.js";
 import { EMBEDDED_UI } from "./embedded-ui.generated.js";
@@ -156,7 +155,7 @@ export function createHubApp(): Hono {
     }
 
     const active = activeRunners.get(runnerSessionId);
-    const runnerSession = runnerStore.get(runnerSessionId);
+    const runnerSession = sessionStore.getSession(runnerSessionId);
 
     if (!active || !runnerSession) {
       return c.json({
@@ -165,8 +164,6 @@ export function createHubApp(): Hono {
         error: "Session not found or agent not running. Create a session with POST /api/playground/session first.",
       }, 502);
     }
-
-    runnerStore.update(runnerSessionId, { status: "streaming" });
 
     await active.session.send({ prompt });
 
@@ -179,14 +176,7 @@ export function createHubApp(): Hono {
 
   app.get("/api/playground/frames/:runnerSessionId", (c) => {
     const runnerSessionId = c.req.param("runnerSessionId");
-    const runnerSession = runnerStore.get(runnerSessionId);
-    if (!runnerSession) return c.json({ frames: [] });
-    // Always include runner's own frames (e.g. session.connecting, session.error); merge with session store when bridge reports one
-    const runnerFrames = runnerSession.frames;
-    const frames =
-      runnerSession.bridgeSessionId != null
-        ? [...runnerFrames, ...sessionStore.getFrames(runnerSession.bridgeSessionId)]
-        : runnerFrames;
+    const frames = sessionStore.getFrames(runnerSessionId);
     return c.json({ frames });
   });
 
@@ -205,11 +195,10 @@ export function createHubApp(): Hono {
     const cliArgs = Array.isArray(body.cliArgs) && body.cliArgs.length > 0 ? body.cliArgs : defaultCliArgs;
 
     const runnerSessionId = genId("runner");
-    runnerStore.createOrGet(runnerSessionId);
-    runnerStore.update(runnerSessionId, { agentCommand: cliPath, agentArgs: cliArgs, status: "connected" });
+    sessionStore.ensureSession(runnerSessionId);
 
     const addFrame = (type: string, payload: unknown) => {
-      runnerStore.addFrame(runnerSessionId, type, payload);
+      sessionStore.addFrame(runnerSessionId, type, payload, false);
     };
 
     try {
@@ -239,8 +228,7 @@ export function createHubApp(): Hono {
         ? rawMessage.slice(agentPrefix.length)
         : rawMessage;
       const errorSource = isAgentError ? "agent" : "bridge";
-      runnerStore.update(runnerSessionId, { status: "error" });
-      runnerStore.addFrame(runnerSessionId, "session.error", { message, errorSource });
+      sessionStore.addFrame(runnerSessionId, "session.error", { message, errorSource }, false);
       return c.json({ error: message, runnerSessionId, errorSource }, 502);
     }
   });
@@ -250,8 +238,7 @@ export function createHubApp(): Hono {
     if (!active) return;
     await active.stop();
     activeRunners.delete(runnerSessionId);
-    runnerStore.update(runnerSessionId, { runnerPid: undefined });
-    runnerStore.reset(runnerSessionId);
+    sessionStore.resetRunnerSession(runnerSessionId);
   }
 
   app.post("/api/playground/disconnect", async (c) => {
@@ -300,8 +287,8 @@ export function createHubApp(): Hono {
       return c.json({ error: "Invalid JSON" }, 400);
     }
     const type = typeof body.type === "string" ? body.type : "raw";
-    runnerStore.createOrGet(runnerSessionId);
-    const frame = runnerStore.addFrame(runnerSessionId, type, body.payload);
+    sessionStore.ensureSession(runnerSessionId);
+    const frame = sessionStore.addFrame(runnerSessionId, type, body.payload, false);
     return frame ? c.json({ ok: true }) : c.json({ error: "Not found" }, 404);
   });
 
@@ -342,7 +329,7 @@ export async function startHub(options: HubServeOptions): Promise<HubHandle> {
 
   nodeServer.on("error", (err: NodeJS.ErrnoException) => {
     if (err?.code === "EADDRINUSE") {
-      getLogger().error(
+      log.error(
         { err, host, port },
         `Cannot listen on ${host}:${port} (EADDRINUSE). Fix: choose a different port with --listen ${host}:<port>`
       );

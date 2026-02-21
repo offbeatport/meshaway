@@ -1,5 +1,6 @@
-import { AcpAgentClient } from "./acp-rpc-client.js";
-import { getLogger } from "../shared/logging.js";
+import { AcpAgentClient } from "./agents/acp.js";
+import { log } from "../shared/logging.js";
+import { jsonRpcError, jsonRpcResult } from "../protocols/jsonrpc/response.js";
 import { parseEnvelope, isRequest } from "../protocols/jsonrpc/validate.js";
 import {
   createInMemorySessionStore,
@@ -8,22 +9,23 @@ import {
 import { createHubLinkClient, type HubLinkClient } from "./hublink/client.js";
 import { isKilled } from "./interceptors/killswitch.js";
 import {
-  createBridgeClientRouter,
+  createBridgeClient,
   type BridgeClient,
+  type BridgeClientKind,
   type ClientAdapterContext,
 } from "./clients/index.js";
 
 export interface BridgeEngineOptions {
-  agent?: string;
+  agent: string;
   agentArgs?: string[];
+  client: BridgeClientKind;
   hubUrl?: string;
   sessionStore?: SessionStore;
 }
 
 export class BridgeEngine {
-  private readonly logger = getLogger();
   private readonly sessionStore: SessionStore;
-  private readonly clientRouter: ReadonlyMap<string, BridgeClient>;
+  private readonly client: BridgeClient;
   private readonly localToAgentSession = new Map<string, string>();
   private acpClient: AcpAgentClient | null = null;
   private acpInitialized = false;
@@ -34,11 +36,12 @@ export class BridgeEngine {
       throw new Error("Agent command is required to start the bridge. Please set the --agent option.");
     }
     this.sessionStore = opts.sessionStore ?? createInMemorySessionStore();
+    log.info(`Starting bridge: client=${opts.client}, agent=${opts.agent} ${opts.agentArgs?.join(" ") ?? ""}`);
     this.acpClient = new AcpAgentClient(opts.agent, opts.agentArgs ?? []);
     if (typeof opts.hubUrl === "string" && opts.hubUrl) {
       this.hubLink = createHubLinkClient(opts.hubUrl);
     }
-    this.clientRouter = createBridgeClientRouter(this.getClientAdapterContext());
+    this.client = createBridgeClient(opts.client, this.getClientAdapterContext());
   }
 
   close(): void {
@@ -103,11 +106,7 @@ export class BridgeEngine {
     } catch (err) {
       return {
         status: 400,
-        payload: {
-          jsonrpc: "2.0",
-          id: null,
-          error: { code: -32600, message: err instanceof Error ? err.message : "Invalid request" },
-        },
+        payload: jsonRpcError(null, -32600, "Invalid request", err),
       };
     }
 
@@ -117,14 +116,7 @@ export class BridgeEngine {
 
     const reqId = envelope.id ?? null;
     if (reqId === null || (typeof reqId !== "string" && typeof reqId !== "number")) {
-      return {
-        status: 400,
-        payload: {
-          jsonrpc: "2.0",
-          id: null,
-          error: { code: -32600, message: "Invalid request id" },
-        },
-      };
+      return { status: 400, payload: jsonRpcError(null, -32600, "Invalid request id") };
     }
 
     const method = envelope.method;
@@ -136,49 +128,37 @@ export class BridgeEngine {
           try {
             await this.ensureAcpInitialized();
           } catch (err) {
-            this.logger.warn({ err }, "ACP agent initialize failed");
+            log.warn({ err }, "ACP agent initialize failed");
           }
         }
         return {
           status: 200,
-          payload: {
-            jsonrpc: "2.0",
-            id: reqId,
-            result: {
-              protocolVersion: 1,
-              serverInfo: { name: "meshaway", version: "0.1.0" },
-            },
-          },
+          payload: jsonRpcResult(reqId, {
+            protocolVersion: 1,
+            serverInfo: { name: "meshaway", version: "0.1.0" },
+          }),
         };
       }
 
-      const client = this.clientRouter.get(method);
-      if (client) {
-        const response = await client.handle(reqId, method, params);
-        return { status: 200, payload: response };
+      if (!this.client.canHandle(method)) {
+        return {
+          status: 200,
+          payload: jsonRpcError(reqId, -32601, `Method not implemented: ${method}`),
+        };
       }
-
-      return {
-        status: 200,
-        payload: {
-          jsonrpc: "2.0",
-          id: reqId,
-          error: { code: -32601, message: `Method not implemented: ${method}` },
-        },
-      };
+      const response = await this.client.handle(reqId, method, params);
+      return { status: 200, payload: response };
     } catch (err) {
-      this.logger.error({ err, method }, "Bridge request failed");
+      log.error({ err, method }, "Bridge request failed");
       const errWithCode = err as Error & { code?: number };
       return {
         status: 200,
-        payload: {
-          jsonrpc: "2.0",
-          id: reqId,
-          error: {
-            code: typeof errWithCode.code === "number" ? errWithCode.code : -32000,
-            message: err instanceof Error ? err.message : "Bridge error",
-          },
-        },
+        payload: jsonRpcError(
+          reqId,
+          typeof errWithCode.code === "number" ? errWithCode.code : -32000,
+          "Bridge error",
+          err
+        ),
       };
     }
   }

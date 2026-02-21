@@ -79,17 +79,7 @@ export interface CopilotRunnerResult {
 }
 const AGENT_ERROR_PREFIX = "Agent: ";
 
-/** Capture stderr from bridge subprocess to detect agent vs bridge errors (bridge writes "Agent: ..." on agent failure). */
-function captureBridgeStderr(client: CopilotClient): string[] {
-  const lines: string[] = [];
-  const proc = (client as unknown as { cliProcess?: ChildProcess | null }).cliProcess;
-  if (!proc?.stderr) return lines;
-  proc.stderr.on("data", (chunk: Buffer | string) => {
-    const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
-    lines.push(...text.split(/\r?\n/).filter(Boolean));
-  });
-  return lines;
-}
+
 
 
 export async function createCopilotRunner(
@@ -98,8 +88,7 @@ export async function createCopilotRunner(
   const { addFrame, cliPath, cliArgs, model = "gpt-5" } = options;
   const bridgeCommand = resolveBridgeCommand(cliPath, cliArgs);
 
-  const push = addFrame;
-  push("copilot.client.starting", { cliPath, cliArgs: [...cliArgs], model });
+  addFrame("copilot.client.starting", { cliPath, cliArgs: [...cliArgs], model });
   const client = new CopilotClient({
     cliPath: bridgeCommand.cmd || cliPath,
     cliArgs: bridgeCommand.args || cliArgs,
@@ -108,31 +97,23 @@ export async function createCopilotRunner(
   });
   await client.start();
 
-  const stderrLines = captureBridgeStderr(client);
-  push("copilot.client.started", { cliPath, cliArgs: [...cliArgs], model });
+  // const stderrLines = captureBridgeStderr(client);
+  addFrame("copilot.client.started", { cliPath, cliArgs: [...cliArgs], model });
 
   let session: CopilotSession;
   try {
     session = await client.createSession({ model });
   } catch (err) {
-    const agentLine = stderrLines.find((l) => l.startsWith(AGENT_ERROR_PREFIX));
-    const augmented = err instanceof Error ? err : new Error(String(err));
-    if (agentLine) {
-      (augmented as Error & { errorSource?: "agent" | "bridge" }).errorSource = "agent";
-      augmented.message = agentLine.slice(AGENT_ERROR_PREFIX.length);
-    } else {
-      (augmented as Error & { errorSource?: "agent" | "bridge" }).errorSource = "bridge";
-    }
-    throw augmented;
+    throw err;
   }
 
-  push("copilot.session.created", {
+  addFrame("copilot.session.created", {
     sessionId: session.sessionId,
     model,
   });
 
   session.on((event: { type: string;[key: string]: unknown }) => {
-    push(`copilot.${event.type}`, event);
+    addFrame(`copilot.${event.type}`, event);
   });
 
   const stop = async () => {

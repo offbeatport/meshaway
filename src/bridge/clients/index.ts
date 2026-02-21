@@ -1,7 +1,5 @@
 /**
- * Client adapters: each client (Copilot, ACP, Claude, …) sends its protocol to the bridge.
- * Add a new client: create a class extending BridgeClient, implement canHandle/handle, add to createBridgeClients.
- *
+ * Client adapters: bridge is started with a single client (--client copilot | claude | acp).
  * - BridgeClient: abstract base with shared helpers (requestAcp, addFrame, ensureSession, …).
  * - AcpClient: client speaks ACP → forward to agent → ACP response (passthrough).
  * - CopilotClient: client speaks Copilot → convert to ACP → agent → convert back to Copilot.
@@ -19,21 +17,17 @@ import { AcpClient } from "./acp.js";
 import { CopilotClient } from "./copilot.js";
 import { ClaudeClient } from "./claude.js";
 
-/** Create all bridge clients with the given context. Engine uses this and routes by canHandle(method). */
-export function createBridgeClients(ctx: ClientAdapterContext): BridgeClient[] {
-  return [new AcpClient(ctx), new CopilotClient(ctx), new ClaudeClient(ctx)];
-}
+export type BridgeClientKind = "copilot" | "claude" | "acp";
 
-/** Build a method -> client routing table once. Throws if methods overlap. */
-export function createBridgeClientRouter(ctx: ClientAdapterContext): ReadonlyMap<string, BridgeClient> {
-  const map = new Map<string, BridgeClient>();
-  for (const client of createBridgeClients(ctx)) {
-    for (const method of client.supportedMethods()) {
-      if (map.has(method)) {
-        throw new Error(`Duplicate bridge client handler for method: ${method}`);
-      }
-      map.set(method, client);
-    }
+export const BRIDGE_CLIENT_KINDS: readonly BridgeClientKind[] = ["copilot", "claude", "acp"];
+
+export function createBridgeClient(kind: BridgeClientKind, ctx: ClientAdapterContext): BridgeClient {
+  switch (kind) {
+    case "acp":
+      return new AcpClient(ctx);
+    case "copilot":
+      return new CopilotClient(ctx);
+    case "claude":
+      return new ClaudeClient(ctx);
   }
-  return map;
 }

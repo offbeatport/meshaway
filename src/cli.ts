@@ -2,16 +2,17 @@
  * Meshaway CLI — single-file entry: program, commands, and utils.
  */
 
-import { Command } from "commander";
+import { Command, createOption } from "commander";
 import chalk from "chalk";
 import { spawn } from "node:child_process";
 import { readFileSync, existsSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_HUB_LISTEN } from "./shared/constants.js";
 import { parseListen } from "./shared/net.js";
-import { log, initLogger, LogLevel, LogFormat } from "./shared/logging.js";
-import { getEnv } from "./shared/env.js";
+import { log, initLogger, LogLevel, LogFormat, LOG_LEVELS, LOG_FORMATS } from "./shared/logging.js";
 import { startHub } from "./hub/server.js";
+import type { BridgeClientKind } from "./bridge/clients/index.js";
+import { BRIDGE_CLIENT_KINDS } from "./bridge/clients/index.js";
 import { runStdioBridge } from "./bridge/stdio.js";
 
 // --- utils ---
@@ -36,13 +37,13 @@ function getPackageJsonVersion(): string {
       if (existsSync(p)) {
         const raw = readFileSync(p, "utf8");
         const pkg = JSON.parse(raw) as { version?: string };
-        return pkg?.version ?? "0.1.0";
+        if (pkg?.version) {
+          return pkg.version;
+        }
       }
     }
-  } catch {
-    // fallthrough
-  }
-  return "0.1.0";
+  } catch { /* fallthrough */ }
+  return "N/A";
 }
 
 
@@ -55,20 +56,26 @@ export function createProgram(): Command {
     .name("meshaway")
     .description("Meshaway — Simple Bridge + Monitor Hub")
     .version(getPackageJsonVersion())
-    .option("--log-level <level>", "Log level", "info")
-    .option("--log-format <format>", "Log format: text or json", "text")
-    .action(() => {
+    .addOption(
+      createOption("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
+    )
+    .addOption(
+      createOption("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
+    )
+    .action(async (opts: Record<string, unknown>) => {
+      initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
+
       const version = getPackageJsonVersion();
       const help = [
         chalk.bold("Meshaway") + ` v${version}\n`,
         "Bridge and Hub for agentic tools. Connects SDKs (e.g. GitHub Copilot SDK)",
         "to ACP provider agents (e.g. gemeni-cli, opencode etc.).\n",
         "Usage:",
-        "  meshaway hub       Start Hub (monitor sessions, playground)",
         "  meshaway bridge    Start Bridge in stdio mode",
+        "  meshaway hub       Start Hub (monitor sessions, playground)",
         "Examples:",
-        "  meshaway hub --listen 127.0.0.1:7337   # Hub on custom port",
         "  meshaway bridge --agent gemini # Bridge for Copilot/ACP\n",
+        "  meshaway hub --listen 127.0.0.1:7337   # Hub on custom port",
         "  meshaway --help for options.  meshaway <command> --help for command help.",
       ].join("\n");
       log.info(help);
@@ -80,8 +87,12 @@ export function createProgram(): Command {
     .option("--listen <host:port>", "Listen address", DEFAULT_HUB_LISTEN)
     .option("--port <port>", "Port (default 7337)")
     .option("--no-open", "Do not open the browser automatically")
-    .option("--log-level <level>", "Log level", "info")
-    .option("--log-format <format>", "Log format", "text")
+    .addOption(
+      createOption("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
+    )
+    .addOption(
+      createOption("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
+    )
     .action(async (opts: Record<string, string | boolean | undefined>) => {
       initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
 
@@ -125,15 +136,27 @@ export function createProgram(): Command {
     .allowExcessArguments(true)
     .option("--agent <specifier>", "Agent command specifier (e.g. gemini)")
     .option("--agent-args <args...>", "Extra arguments for the agent")
-    .option("--log-level <level>", "Log level", "info")
-    .option("--log-format <format>", "Log format", "text")
+    .addOption(
+      createOption("--client <client>", "Client adapter")
+        .choices([...BRIDGE_CLIENT_KINDS])
+        .default("copilot")
+    )
+    .option("--hub-url <url>", "Hub URL", "http://localhost:7337")
+    .addOption(
+      createOption("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
+    )
+    .addOption(
+      createOption("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
+    )
     .action(async (opts: Record<string, unknown>) => {
       try {
-        initLogger(
-          (opts.logLevel as LogLevel || "info"),
-          (opts.logFormat as LogFormat || "text")
+        initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
+
+        await runStdioBridge(
+          opts.client as BridgeClientKind,
+          opts.agent as string,
+          opts.agentArgs as string[]
         );
-        await runStdioBridge(opts.agent as string, opts.agentArgs as string[]);
       } catch (err) {
         log.error(String(err));
         process.exit(1);
@@ -143,6 +166,5 @@ export function createProgram(): Command {
   return program;
 }
 
-initLogger("info", "plain");
-
+initLogger("info", "text");
 createProgram().parse();

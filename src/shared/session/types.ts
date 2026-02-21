@@ -4,6 +4,9 @@ export interface Session {
   updatedAt: number;
   status: "active" | "completed" | "killed";
   frames: Frame[];
+  client?: string;
+  agent?: string;
+  agentArgs?: string[];
 }
 
 export interface Frame {

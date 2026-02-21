@@ -1,13 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import { getLogger } from "../../shared/logging.js";
+import { log } from "../../shared/logging.js";
 
 type JsonRpcId = string | number;
-
-export interface AcpAgentClientOptions {
-  cwd?: string;
-  onStderr?: (text: string) => void;
-}
 
 export class AcpAgentClient {
   private proc: ChildProcess & { stdin: NodeJS.WritableStream; stdout: NodeJS.ReadableStream };
@@ -18,18 +13,19 @@ export class AcpAgentClient {
     { resolve: (value: unknown) => void; reject: (err: Error) => void; timer: NodeJS.Timeout }
   >();
 
-  constructor(cmd: string, args: string[] = [], options: AcpAgentClientOptions = {}) {
+  constructor(cmd: string, args: string[] = []) {
+
+    log.info(`Spawning agent: ${cmd} ${args.join(" ")}`);
     this.proc = spawn(cmd, args, {
-      cwd: options.cwd ?? process.cwd(),
+      cwd: process.cwd(),
       stdio: ["pipe", "pipe", "pipe"],
     }) as ChildProcess & { stdin: NodeJS.WritableStream; stdout: NodeJS.ReadableStream };
 
     this.rl = createInterface({ input: this.proc.stdout, crlfDelay: Infinity });
     this.rl.on("line", (line) => this.onLine(line));
 
-    const onStderr = options.onStderr ?? ((text: string) => getLogger().info(text));
     this.proc.stderr?.on("data", (chunk: Buffer | string) => {
-      onStderr(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+      log.error(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
     });
   }
 
