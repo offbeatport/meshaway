@@ -1,6 +1,7 @@
 /**
- * Copilot client (e.g. GitHub Copilot SDK): client sends Copilot protocol;
- * we convert to ACP → agent → convert ACP result back to Copilot.
+ * Copilot client (GitHub Copilot SDK): client speaks the Copilot CLI protocol.
+ * This adapter implements the JSON-RPC surface that the SDK expects and
+ * forwards conversation work to an ACP agent.
  */
 
 import { genId } from "../../shared/ids.js";
@@ -10,16 +11,261 @@ import { redactPayload } from "../interceptors/redaction.js";
 import { BridgeAdapter } from "./base.js";
 import type { BridgeResponse, JsonRpcId } from "./types.js";
 
+type CopilotHandler = (id: JsonRpcId, params: unknown) => BridgeResponse | Promise<BridgeResponse>;
+
 export class CopilotAdapter extends BridgeAdapter {
+  private readonly handlers: Record<string, CopilotHandler> = {
+    "ping": (id, params) => this.handlePing(id, params),
+    "status.get": (id) => this.handleStatusGet(id),
+    "auth.getStatus": (id) => this.handleAuthGetStatus(id),
+    "models.list": (id) => this.handleModelsList(id),
+    "tools.list": (id) => this.handleToolsList(id),
+    "account.getQuota": (id) => this.handleAccountGetQuota(id),
+    "session.create": (id, params) => this.handleSessionCreate(id, params),
+    "session.resume": (id, params) => this.handleSessionResume(id, params),
+    "session.send": (id, params) => this.handleSessionSend(id, params),
+    "session.destroy": (id, params) => this.handleSessionDestroy(id, params),
+    "session.abort": (id, params) => this.handleSessionAbort(id, params),
+    "session.list": (id) => this.handleSessionList(id),
+    "session.delete": (id, params) => this.handleSessionDelete(id, params),
+    "session.getMessages": (id, params) => this.handleSessionGetMessages(id, params),
+    "session.getLastId": (id, params) => this.handleSessionGetLastId(id, params),
+    "session.getForeground": (id) => this.handleSessionGetForeground(id),
+    "session.setForeground": (id, params) => this.handleSessionSetForeground(id, params),
+    "session.model.getCurrent": (id, params) => this.handleSessionModelGetCurrent(id, params),
+    "session.model.switchTo": (id, params) => this.handleSessionModelSwitchTo(id, params),
+    "session.mode.get": (id, params) => this.handleSessionModeGet(id, params),
+    "session.mode.set": (id, params) => this.handleSessionModeSet(id, params),
+    "session.plan.read": (id, params) => this.handleSessionPlanRead(id, params),
+    "session.plan.update": (id, params) => this.handleSessionPlanUpdate(id, params),
+    "session.plan.delete": (id, params) => this.handleSessionPlanDelete(id, params),
+    "session.workspace.listFiles": (id, params) => this.handleSessionWorkspaceListFiles(id, params),
+    "session.workspace.readFile": (id, params) => this.handleSessionWorkspaceReadFile(id, params),
+    "session.workspace.createFile": (id, params) => this.handleSessionWorkspaceCreateFile(id, params),
+    "session.fleet.start": (id, params) => this.handleSessionFleetStart(id, params),
+    prompt: (id, params) => this.handlePrompt(id, params),
+    cancel: (id, params) => this.handleCancel(id, params),
+  };
+
   supportedMethods(): readonly string[] {
-    return ["prompt", "cancel"];
+    return Object.keys(this.handlers);
   }
 
   async handle(id: JsonRpcId, method: string, params: unknown): Promise<BridgeResponse> {
-    if (method === "prompt") return this.handlePrompt(id, params);
-    if (method === "cancel") return this.handleCancel(id, params);
-    return this.error(id, -32601, `Method not implemented: ${method}`);
+    const handler = this.handlers[method];
+    if (!handler) return this.error(id, -32601, `Method not implemented: ${method}`);
+    return handler(id, params);
   }
+
+  // --- Server-scoped methods -------------------------------------------------
+
+  private async handlePing(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
+    const rec = (params ?? {}) as { message?: unknown };
+    const message = typeof rec.message === "string" ? rec.message : "ok";
+
+    // Map Copilot `ping` → ACP `initialize` on the agent.
+    await this.requestAgent("initialize", {
+      protocolVersion: 1,
+      clientCapabilities: {},
+      clientInfo: { name: "meshaway-copilot-bridge", version: "0.1.0" },
+    });
+
+    return this.result(id, {
+      message,
+      timestamp: Date.now(),
+      protocolVersion: 1,
+    });
+  }
+
+  private handleStatusGet(id: JsonRpcId): BridgeResponse {
+    return this.result(id, {
+      version: "0.1.0",
+      protocolVersion: 1,
+    });
+  }
+
+  private handleAuthGetStatus(id: JsonRpcId): BridgeResponse {
+    return this.result(id, {
+      isAuthenticated: false,
+      authType: undefined,
+      statusMessage:
+        "Authentication is managed by the underlying agent. Configure GEMINI_API_KEY / etc. for meshaway agents.",
+    });
+  }
+
+  private handleModelsList(id: JsonRpcId): BridgeResponse {
+    // Minimal, generic model description. The SDK mostly needs that at least one model exists.
+    return this.result(id, {
+      models: [
+        {
+          id: "default",
+          name: "Default",
+          capabilities: {
+            supports: { vision: false, reasoningEffort: false },
+            limits: { max_context_window_tokens: 8192 },
+          },
+          policy: { state: "enabled", terms: "" },
+          billing: { multiplier: 1 },
+          supportedReasoningEfforts: [],
+          defaultReasoningEffort: undefined,
+        },
+      ],
+    });
+  }
+
+  private handleToolsList(id: JsonRpcId): BridgeResponse {
+    // No built-in tools exposed from the bridge for now.
+    return this.result(id, { tools: [] });
+  }
+
+  private handleAccountGetQuota(id: JsonRpcId): BridgeResponse {
+    return this.result(id, { quotaSnapshots: {} });
+  }
+
+  // --- Session lifecycle & messaging -----------------------------------------
+
+  private async handleSessionCreate(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
+    const rec = (params ?? {}) as Record<string, unknown>;
+    const localSessionId =
+      typeof rec.sessionId === "string" && rec.sessionId.length > 0
+        ? rec.sessionId
+        : genId("sess");
+    this.ensureSession(localSessionId);
+
+    if (!this.getLocalToAgentSession().has(localSessionId)) {
+      const newSessionResult = (await this.requestAgent("session/new", {
+        cwd: process.cwd(),
+        mcpServers: rec.mcpServers ?? [],
+      })) as Record<string, unknown> | undefined;
+      const agentSessionId =
+        typeof newSessionResult?.sessionId === "string"
+          ? newSessionResult.sessionId
+          : localSessionId;
+      this.setLocalToAgentSession(localSessionId, agentSessionId);
+    }
+
+    return this.result(id, {
+      sessionId: localSessionId,
+      workspacePath: null,
+    });
+  }
+
+  private handleSessionResume(id: JsonRpcId, params: unknown): BridgeResponse {
+    const rec = (params ?? {}) as Record<string, unknown>;
+    const sessionId = typeof rec.sessionId === "string" ? rec.sessionId : genId("sess");
+    this.ensureSession(sessionId);
+    return this.result(id, { sessionId, workspacePath: null });
+  }
+
+  private async handleSessionSend(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
+    // The SDK uses session.send; we reuse the prompt flow.
+    return this.handlePrompt(id, params);
+  }
+
+  private handleSessionDestroy(id: JsonRpcId, params: unknown): BridgeResponse {
+    const rec = (params ?? {}) as Record<string, unknown>;
+    const sessionId = typeof rec.sessionId === "string" ? rec.sessionId : undefined;
+    if (sessionId) {
+      this.updateSessionStatus(sessionId, "completed");
+    }
+    return this.result(id, { ok: true });
+  }
+
+  private handleSessionAbort(id: JsonRpcId, params: unknown): BridgeResponse {
+    return this.handleCancel(id, params);
+  }
+
+  private handleSessionList(id: JsonRpcId): BridgeResponse {
+    const sessions = Array.from(this.getLocalToAgentSession().keys());
+    return this.result(id, { sessions });
+  }
+
+  private handleSessionDelete(id: JsonRpcId, params: unknown): BridgeResponse {
+    const rec = (params ?? {}) as Record<string, unknown>;
+    const sessionId = typeof rec.sessionId === "string" ? rec.sessionId : undefined;
+    if (sessionId) {
+      this.getLocalToAgentSession().delete(sessionId);
+      this.updateSessionStatus(sessionId, "killed");
+    }
+    return this.result(id, {});
+  }
+
+  private handleSessionGetMessages(id: JsonRpcId, _params: unknown): BridgeResponse {
+    // Bridge does not persist full message history; return empty.
+    return this.result(id, { messages: [] });
+  }
+
+  private handleSessionGetLastId(id: JsonRpcId, _params: unknown): BridgeResponse {
+    // We don't track message IDs; return null.
+    return this.result(id, { lastId: null });
+  }
+
+  private handleSessionGetForeground(id: JsonRpcId): BridgeResponse {
+    const sessions = Array.from(this.getLocalToAgentSession().keys());
+    return this.result(id, { sessionId: sessions[0] ?? null });
+  }
+
+  private handleSessionSetForeground(id: JsonRpcId, _params: unknown): BridgeResponse {
+    // No-op for now; we don't track foregroundness.
+    return this.result(id, { ok: true });
+  }
+
+  // --- Session configuration / workspace helpers -----------------------------
+
+  private handleSessionModelGetCurrent(id: JsonRpcId, params: unknown): BridgeResponse {
+    const rec = (params ?? {}) as Record<string, unknown>;
+    const _sessionId = typeof rec.sessionId === "string" ? rec.sessionId : undefined;
+    // We don't track per-session model; return undefined modelId.
+    return this.result(id, { modelId: undefined });
+  }
+
+  private handleSessionModelSwitchTo(id: JsonRpcId, params: unknown): BridgeResponse {
+    const rec = (params ?? {}) as Record<string, unknown>;
+    const modelId = typeof rec.modelId === "string" ? rec.modelId : undefined;
+    return this.result(id, { modelId });
+  }
+
+  private handleSessionModeGet(id: JsonRpcId, params: unknown): BridgeResponse {
+    const _rec = (params ?? {}) as Record<string, unknown>;
+    return this.result(id, { mode: "interactive" as const });
+  }
+
+  private handleSessionModeSet(id: JsonRpcId, params: unknown): BridgeResponse {
+    const rec = (params ?? {}) as Record<string, unknown>;
+    const mode =
+      rec.mode === "plan" || rec.mode === "autopilot" ? (rec.mode as string) : "interactive";
+    return this.result(id, { mode });
+  }
+
+  private handleSessionPlanRead(id: JsonRpcId, _params: unknown): BridgeResponse {
+    return this.result(id, { exists: false, content: null });
+  }
+
+  private handleSessionPlanUpdate(id: JsonRpcId, _params: unknown): BridgeResponse {
+    return this.result(id, {});
+  }
+
+  private handleSessionPlanDelete(id: JsonRpcId, _params: unknown): BridgeResponse {
+    return this.result(id, {});
+  }
+
+  private handleSessionWorkspaceListFiles(id: JsonRpcId, _params: unknown): BridgeResponse {
+    return this.result(id, { files: [] });
+  }
+
+  private handleSessionWorkspaceReadFile(id: JsonRpcId, _params: unknown): BridgeResponse {
+    return this.result(id, { content: "" });
+  }
+
+  private handleSessionWorkspaceCreateFile(id: JsonRpcId, _params: unknown): BridgeResponse {
+    return this.result(id, {});
+  }
+
+  private handleSessionFleetStart(id: JsonRpcId, _params: unknown): BridgeResponse {
+    return this.result(id, { started: false });
+  }
+
+  // --- Core prompt / cancel (mapped from session.send & legacy methods) ------
 
   private async handlePrompt(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
     const parsed = assertSchema(CopilotPromptParamsSchema, params, "copilot prompt params");
@@ -61,7 +307,7 @@ export class CopilotAdapter extends BridgeAdapter {
     });
   }
 
-  private async handleCancel(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
+  private handleCancel(id: JsonRpcId, params: unknown): BridgeResponse {
     const rec = (params ?? {}) as Record<string, unknown>;
     const sessionId = typeof rec.sessionId === "string" ? rec.sessionId : undefined;
     if (sessionId) {
