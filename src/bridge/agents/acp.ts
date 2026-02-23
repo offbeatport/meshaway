@@ -1,10 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import { log } from "../../shared/logging.js";
+import { BridgeAgent } from "./base.js";
 
 type JsonRpcId = string | number;
 
-export class AcpAgentClient {
+export class AcpAgentClient extends BridgeAgent {
   private proc: ChildProcess & { stdin: NodeJS.WritableStream; stdout: NodeJS.ReadableStream };
   private rl: ReturnType<typeof createInterface>;
   private nextId = 1;
@@ -14,7 +15,7 @@ export class AcpAgentClient {
   >();
 
   constructor(cmd: string, args: string[] = []) {
-
+    super();
     log.info(`Spawning agent: ${cmd} ${args.join(" ")}`);
     this.proc = spawn(cmd, args, {
       cwd: process.cwd(),
@@ -72,7 +73,7 @@ export class AcpAgentClient {
     return promise;
   }
 
-  close(): void {
+  override close(): void {
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
       pending.reject(new Error("ACP client closed"));

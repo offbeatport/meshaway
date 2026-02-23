@@ -7,9 +7,10 @@ import { genId } from "../../shared/ids.js";
 import { CopilotPromptParamsSchema } from "../../protocols/copilot/types.js";
 import { assertSchema } from "../../protocols/assert.js";
 import { redactPayload } from "../interceptors/redaction.js";
-import { BridgeClient, type BridgeResponse, type JsonRpcId } from "./shared/index.js";
+import { BridgeAdapter } from "./base.js";
+import type { BridgeResponse, JsonRpcId } from "./types.js";
 
-export class CopilotClient extends BridgeClient {
+export class CopilotAdapter extends BridgeAdapter {
   supportedMethods(): readonly string[] {
     return ["prompt", "cancel"];
   }

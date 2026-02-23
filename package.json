@@ -31,6 +31,7 @@
   "dependencies": {
     "@base-ui/react": "^1.0.0-beta.6",
     "@hono/node-server": "^1.14.4",
+    "ansi-to-react": "^6.2.6",
     "arktype": "^2.1.29",
     "chalk": "^5.3.0",
     "commander": "^14.0.1",

@@ -11,8 +11,8 @@ import { DEFAULT_HUB_LISTEN } from "./shared/constants.js";
 import { parseListen } from "./shared/net.js";
 import { log, initLogger, LogLevel, LogFormat, LOG_LEVELS, LOG_FORMATS } from "./shared/logging.js";
 import { startHub } from "./hub/server.js";
-import type { BridgeClientKind } from "./bridge/clients/index.js";
-import { BRIDGE_CLIENT_KINDS } from "./bridge/clients/index.js";
+import type { BridgeAdapterKind } from "./bridge/adaptors/index.js";
+import { BRIDGE_ADAPTER_KINDS } from "./bridge/adaptors/index.js";
 import { runStdioBridge } from "./bridge/stdio.js";
 
 // --- utils ---
@@ -138,7 +138,7 @@ export function createProgram(): Command {
     .option("--agent-args <args...>", "Extra arguments for the agent")
     .addOption(
       createOption("--client <client>", "Client adapter")
-        .choices([...BRIDGE_CLIENT_KINDS])
+        .choices([...BRIDGE_ADAPTER_KINDS])
         .default("copilot")
     )
     .option("--hub-url <url>", "Hub URL", "http://localhost:7337")
@@ -153,7 +153,7 @@ export function createProgram(): Command {
         initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
 
         await runStdioBridge(
-          opts.client as BridgeClientKind,
+          opts.client as BridgeAdapterKind,
           opts.agent as string,
           opts.agentArgs as string[]
         );

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AppSelect } from "@/components/AppSelect";
 import { SyntaxHighlight } from "@/components/SyntaxHighlight";
+import Ansi from "ansi-to-react";
 import {
   Send,
   Loader2,
@@ -284,7 +285,7 @@ export function Playground() {
           Playground
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Test translation: choose dialect, send messages, watch frames and tool calls. No external client.
+          Test translation: choose dialect, send messages, watch frames and tool calls.
         </p>
       </div>
 
@@ -398,9 +399,11 @@ export function Playground() {
                   The agent failed to start.
                 </p>
               )}
-              <p className="text-sm text-amber-200/90 whitespace-pre-wrap break-words font-mono">
+              <Ansi
+                className="text-sm text-amber-200/90 whitespace-pre-wrap break-words font-mono block"
+              >
                 {displaySessionError}
-              </p>
+              </Ansi>
             </div>
           </div>
         )}
@@ -447,7 +450,9 @@ export function Playground() {
               <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-medium text-amber-200">Error</p>
-                <p className="mt-1 text-sm text-zinc-400">{lastResult.error}</p>
+                <Ansi className="mt-1 text-sm text-zinc-400 block whitespace-pre-wrap break-words font-mono">
+                  {lastResult.error}
+                </Ansi>
               </div>
             </div>
           </div>

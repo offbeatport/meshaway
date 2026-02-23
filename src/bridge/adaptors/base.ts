@@ -1,12 +1,13 @@
-import type { ClientAdapterContext } from "./context.js";
+import { isKilled } from "../interceptors/killswitch.js";
+import type { AdapterContext } from "./context.js";
 import type { BridgeResponse, JsonRpcId } from "./types.js";
 
 /**
- * Abstract base for client adapters (ACP, Copilot, Claude, ...).
+ * Abstract base for bridge adapters (ACP, Copilot, Claude, ...).
  * Subclasses declare supported methods and implement handle().
  */
-export abstract class BridgeClient {
-  constructor(protected readonly ctx: ClientAdapterContext) {}
+export abstract class BridgeAdapter {
+  constructor(protected readonly ctx: AdapterContext) {}
 
   /** Methods handled by this client adapter. */
   abstract supportedMethods(): readonly string[];
@@ -20,21 +21,20 @@ export abstract class BridgeClient {
   abstract handle(id: JsonRpcId, method: string, params: unknown): Promise<BridgeResponse>;
 
   protected async requestAcp(method: string, params: unknown): Promise<unknown> {
-    if (!this.ctx.acpClient) {
-      const err = new Error("ACP agent not configured") as Error & { code?: number };
+    if (!this.ctx.agent) {
+      const err = new Error("Agent not configured") as Error & { code?: number };
       err.code = -32001;
       throw err;
     }
-    await this.ctx.ensureAcpInitialized();
-    return this.ctx.acpClient.request(method, params);
+    return this.ctx.agent.request(method, params);
   }
 
   protected addFrame(sessionId: string, type: string, payload: unknown, redacted = true): void {
-    this.ctx.addFrameAndReport(sessionId, type, payload, redacted);
+    this.ctx.addFrame(sessionId, type, payload, redacted);
   }
 
   protected ensureSession(sessionId: string): void {
-    this.ctx.ensureHubSession(sessionId);
+    this.ctx.ensureSession(sessionId);
   }
 
   protected resolveAgentSessionId(localSessionId: string): string {
@@ -42,7 +42,7 @@ export abstract class BridgeClient {
   }
 
   protected isSessionKilled(sessionId: string): boolean {
-    return this.ctx.isKilled(sessionId);
+    return isKilled(sessionId);
   }
 
   protected updateSessionStatus(sessionId: string, status: "active" | "completed" | "killed"): void {

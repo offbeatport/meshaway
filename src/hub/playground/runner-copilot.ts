@@ -6,11 +6,11 @@
 
 import { CopilotClient } from "@github/copilot-sdk";
 import type { CopilotSession } from "@github/copilot-sdk";
-import type { ChildProcess } from "node:child_process";
 
 export type AddFrameFn = (type: string, payload: unknown) => void;
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { log } from "../../shared/logging.js";
 
 
 function extractAgentFromArgs(args: string[]): string {
@@ -77,9 +77,6 @@ export interface CopilotRunnerResult {
   session: CopilotSession;
   stop: () => Promise<void>;
 }
-const AGENT_ERROR_PREFIX = "Agent: ";
-
-
 
 
 export async function createCopilotRunner(
@@ -97,7 +94,6 @@ export async function createCopilotRunner(
   });
   await client.start();
 
-  // const stderrLines = captureBridgeStderr(client);
   addFrame("copilot.client.started", { cliPath, cliArgs: [...cliArgs], model });
 
   let session: CopilotSession;
@@ -119,14 +115,12 @@ export async function createCopilotRunner(
   const stop = async () => {
     try {
       await session.destroy();
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
+
     try {
       await client.stop();
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
+
   };
 
   return { client, session, stop };

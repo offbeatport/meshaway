@@ -3,9 +3,10 @@
  * Stub only for now.
  */
 
-import { BridgeClient, type JsonRpcId } from "./shared/index.js";
+import { BridgeAdapter } from "./base.js";
+import type { JsonRpcId } from "./types.js";
 
-export class ClaudeClient extends BridgeClient {
+export class ClaudeAdapter extends BridgeAdapter {
   supportedMethods(): readonly string[] {
     return []; // No Claude methods wired yet
   }

@@ -4,7 +4,7 @@
  */
 
 import { jsonRpcError } from "../protocols/jsonrpc/response.js";
-import type { BridgeClientKind } from "./clients/index.js";
+import type { BridgeAdapterKind } from "./adaptors/index.js";
 import { BridgeEngine } from "./engine.js";
 
 const HEADER_END = "\r\n\r\n";
@@ -22,7 +22,7 @@ function readContentLengthHeader(header: string): number | null {
 }
 
 export async function runStdioBridge(
-  client: BridgeClientKind,
+  client: BridgeAdapterKind,
   agent: string,
   agentArgs: string[] = []
 ): Promise<void> {

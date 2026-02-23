@@ -12,8 +12,8 @@ import {
 } from "../../protocols/acp/types.js";
 import { assertSchema } from "../../protocols/assert.js";
 import { redactPayload } from "../interceptors/redaction.js";
-import { BridgeClient } from "./shared/index.js";
-import type { BridgeResponse, JsonRpcId } from "./shared/index.js";
+import { BridgeAdapter } from "./base.js";
+import type { BridgeResponse, JsonRpcId } from "./types.js";
 
 const ACP_METHODS = [
   "session/new",
@@ -22,7 +22,7 @@ const ACP_METHODS = [
   "session/request_permission",
 ] as const;
 
-export class AcpClient extends BridgeClient {
+export class AcpAdapter extends BridgeAdapter {
   supportedMethods(): readonly string[] {
     return ACP_METHODS;
   }
