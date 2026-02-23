@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AppSelect } from "@/components/AppSelect";
 import { SyntaxHighlight } from "@/components/SyntaxHighlight";
 import Ansi from "ansi-to-react";
@@ -18,6 +19,8 @@ import {
   sendPlaygroundRunner,
   createPlaygroundSession,
   fetchPlaygroundFrames,
+  fetchFrames,
+  getPlaygroundFramesStreamUrl,
   playgroundControl,
   type Frame,
 } from "@/lib/api";
@@ -89,6 +92,7 @@ function FrameRow({ frame }: { frame: Frame }) {
 }
 
 export function Playground() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedPipeline, setSelectedPipeline] = useState<PlaygroundPresetId>(DEFAULT_PLAYGROUND_PRESET_ID);
   const [runnerSessionId, setRunnerSessionId] = useState("");
   const [sessionId, setSessionId] = useState("");
@@ -111,6 +115,21 @@ export function Playground() {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionErrorSource, setSessionErrorSource] = useState<"bridge" | "agent" | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+
+  useEffect(() => {
+    const loadSessionId = searchParams.get("loadSessionId");
+    if (!loadSessionId) return;
+    setRunnerSessionId(loadSessionId);
+    setLastResult({
+      runnerSessionId: loadSessionId,
+      status: "loaded",
+      bridgeType: "stdio",
+    });
+    setSearchParams({}, { replace: true });
+    fetchFrames(loadSessionId)
+      .then(setFrames)
+      .catch(() => setFrames([]));
+  }, [searchParams, setSearchParams]);
 
   const activeRunnerSessionId = lastResult?.runnerSessionId ?? runnerSessionId;
   runnerSessionIdRef.current = activeRunnerSessionId;
@@ -144,6 +163,69 @@ export function Playground() {
           : hasSessionError
             ? "Failed to connect"
             : "Connecting...";
+
+  const chatEvents = frames
+    .filter((f) => {
+      return (
+        f.type === "copilot.prompt" ||
+        f.type === "copilot.assistant.message" ||
+        f.type === "acp.session/prompt.result" ||
+        f.type === "acp.session/update"
+      );
+    })
+    .map((f) => {
+      const isUser = f.type === "copilot.prompt";
+      const role = isUser ? "User" : "Agent";
+      let body = "";
+
+      if (f.payload && typeof f.payload === "object") {
+        const obj = f.payload as Record<string, unknown>;
+
+        if (f.type === "copilot.assistant.message") {
+          const data = obj.data as Record<string, unknown> | undefined;
+          body = typeof data?.content === "string" ? data.content : "";
+        } else if (isUser) {
+          if (typeof obj.prompt === "string") {
+            body = obj.prompt;
+          } else if (Array.isArray(obj.prompt)) {
+            body = JSON.stringify(obj.prompt, null, 2);
+          } else if (Array.isArray(obj.context)) {
+            body = JSON.stringify(obj.context, null, 2);
+          }
+        } else {
+          if (typeof obj.message === "string") {
+            body = obj.message;
+          } else if (typeof obj.result === "string") {
+            body = obj.result;
+          } else if (Array.isArray(obj.content)) {
+            body = obj.content
+              .map((p: unknown) =>
+                p && typeof p === "object" && "text" in p && typeof (p as { text: string }).text === "string"
+                  ? (p as { text: string }).text
+                  : ""
+              )
+              .filter(Boolean)
+              .join("");
+          } else if (typeof obj.content === "string") {
+            body = obj.content;
+          }
+        }
+      }
+
+      if (!body) {
+        body =
+          typeof f.payload === "string"
+            ? f.payload
+            : JSON.stringify(f.payload, null, 2);
+      }
+
+      return {
+        id: String(f.id),
+        type: f.type,
+        role,
+        body,
+      };
+    });
 
   const handlePipelineChange = (value: PlaygroundPresetId) => {
     if (!PLAYGROUND_PRESETS.some((p) => p.id === value)) return;
@@ -229,6 +311,36 @@ export function Playground() {
     const id = setInterval(loadFrames, 1500);
     return () => clearInterval(id);
   }, [activeRunnerSessionId, loadFrames]);
+
+  useEffect(() => {
+    if (!activeRunnerSessionId || typeof EventSource === "undefined") return;
+    const url = getPlaygroundFramesStreamUrl(activeRunnerSessionId);
+    const es = new EventSource(url);
+    es.addEventListener("sync", (e: MessageEvent) => {
+      try {
+        const list = JSON.parse(e.data ?? "[]") as Frame[];
+        if (Array.isArray(list)) setFrames(list);
+      } catch {
+        // ignore
+      }
+    });
+    es.addEventListener("frame", (e: MessageEvent) => {
+      try {
+        const frame = JSON.parse(e.data ?? "{}") as Frame;
+        if (frame?.id) {
+          setFrames((prev) =>
+            prev.some((f) => f.id === frame.id) ? prev : [...prev, frame]
+          );
+        }
+      } catch {
+        // ignore
+      }
+    });
+    es.onerror = () => {
+      es.close();
+    };
+    return () => es.close();
+  }, [activeRunnerSessionId]);
 
   const handleSend = async () => {
     if (!prompt.trim()) return;
@@ -396,15 +508,52 @@ export function Playground() {
         )}
       </section>
 
-      {/* Message + Send + Response (only when connected) */}
+      {/* Message + Send + Chat (only when connected) */}
       <section
         className={`rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4 ${hasSessionCreated ? "" : "opacity-60 pointer-events-none"}`}
         aria-disabled={!hasSessionCreated}
       >
         <h2 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
           <Send className="h-4 w-4" />
-          Message
+          Chat
         </h2>
+        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 max-h-64 overflow-auto p-3 space-y-2">
+          {chatEvents.length === 0 ? (
+            <p className="text-[11px] text-zinc-500">No messages yet. Send a prompt to see responses and permission requests here.</p>
+          ) : (
+            chatEvents.map((m) => (
+              <div
+                key={m.id}
+                className="rounded-md border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs space-y-1"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                    {m.role}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 truncate max-w-[60%]">
+                    {m.type}
+                  </span>
+                </div>
+                <div className="text-[11px] text-zinc-100 whitespace-pre-wrap break-words font-mono">
+                  {m.body}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        {lastResult?.error && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-200">Error</p>
+                <Ansi className="mt-1 text-sm text-zinc-400 block whitespace-pre-wrap break-words font-mono">
+                  {lastResult.error}
+                </Ansi>
+              </div>
+            </div>
+          </div>
+        )}
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -419,7 +568,10 @@ export function Playground() {
           className="w-full rounded-lg border border-zinc-700 bg-zinc-900/80 px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30 resize-y font-mono text-sm disabled:opacity-70"
           disabled={sending || !hasSessionCreated}
         />
-        <div className="flex items-center justify-end flex-wrap gap-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <p className="text-[11px] text-zinc-500">
+            Tip: press Cmd/Ctrl + Enter to send. Responses also appear in the Console below.
+          </p>
           <button
             type="button"
             onClick={handleSend}
@@ -430,20 +582,6 @@ export function Playground() {
             {sending ? "Sending…" : "Send"}
           </button>
         </div>
-        <p className="text-[11px] text-zinc-500">Tip: press Cmd/Ctrl + Enter to send. Response and request appear in the Console below.</p>
-        {lastResult?.error && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-amber-200">Error</p>
-                <Ansi className="mt-1 text-sm text-zinc-400 block whitespace-pre-wrap break-words font-mono">
-                  {lastResult.error}
-                </Ansi>
-              </div>
-            </div>
-          </div>
-        )}
       </section>
 
       {/* Logging console (frames) */}

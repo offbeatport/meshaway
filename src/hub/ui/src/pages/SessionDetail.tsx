@@ -8,6 +8,7 @@ import {
   Shield,
   Wrench,
   Download,
+  Play,
 } from "lucide-react";
 import { useState, useCallback, useMemo } from "react";
 import { Tabs } from "@base-ui/react/tabs";
@@ -313,6 +314,15 @@ export function SessionDetail() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {session.status === "active" && <KillButton onKill={killSession} disabled={false} />}
+                <button
+                  type="button"
+                  onClick={() => id && navigate(`/playground?loadSessionId=${encodeURIComponent(id)}`)}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-sky-400/90 hover:text-sky-400 hover:bg-sky-500/10 border border-sky-500/20"
+                  title="Load this session in Playground"
+                >
+                  <Play className="h-4 w-4" />
+                  Open in Playground
+                </button>
                 <a
                   href={id ? getSessionExportUrl(id) : "#"}
                   download

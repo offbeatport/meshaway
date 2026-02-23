@@ -5,8 +5,10 @@
  */
 export type PlaygroundPresetId =
   | "copilot-stdio-gemini"
+  | "copilot-stdio-codex"
   | "copilot-stdio-claude"
-  | "copilot-stdio-opencode";
+  | "copilot-stdio-opencode"
+  | "copilot-stdio-copilot";
 
 export interface PlaygroundPreset {
   id: PlaygroundPresetId;
@@ -16,6 +18,8 @@ export interface PlaygroundPreset {
   to: string;
   cliPath: string;
   cliArgs: string[];
+  /** Model ID for Copilot SDK session (e.g. gemini-2.5-flash). */
+  model: string;
 }
 
 export const PLAYGROUND_PRESETS: PlaygroundPreset[] = [
@@ -25,20 +29,39 @@ export const PLAYGROUND_PRESETS: PlaygroundPreset[] = [
     to: "Gemini",
     cliPath: "meshaway",
     cliArgs: ["bridge", "--agent", "gemini", "--agent-args", "--experimental-acp"],
+    model: "gemini-2.5-flash",
   },
   {
     id: "copilot-stdio-claude",
     from: "Github Copilot SDK",
-    to: "Claude Code",
+    to: "Claude Code ACP",
     cliPath: "meshaway",
-    cliArgs: ["bridge", "--agent", "claude"],
+    cliArgs: ["bridge", "--agent", "claude-code-acp"],
+    model: "claude-sonnet-4-20250514",
+  },
+  {
+    id: "copilot-stdio-codex",
+    from: "Github Copilot SDK",
+    to: "OpenAI Codex",
+    cliPath: "meshaway",
+    cliArgs: ["bridge", "--agent", "codex-acp"],
+    model: "gpt-4o",
   },
   {
     id: "copilot-stdio-opencode",
     from: "Github Copilot SDK",
     to: "OpenCode",
     cliPath: "meshaway",
-    cliArgs: ["bridge", "--agent", "opencode"],
+    cliArgs: ["bridge", "--agent", "opencode", "--agent-args", "acp"],
+    model: "opencode/glm-5-free",
+  },
+  {
+    id: "copilot-stdio-copilot",
+    from: "Github Copilot SDK",
+    to: "Github Copilot CLI",
+    cliPath: "meshaway",
+    cliArgs: ["bridge", "--agent", "copilot", "--agent-args", "--acp"],
+    model: "gpt-5-mini",
   },
 ];
 

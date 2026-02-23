@@ -5,7 +5,12 @@ import { BridgeAgent } from "./base.js";
 
 type JsonRpcId = string | number;
 
-export class AcpAgentClient extends BridgeAgent {
+export interface BridgeAcpAgentOptions {
+  /** Called when the agent sends a JSON-RPC notification (e.g. session/update). */
+  onNotification?: (method: string, params: unknown) => void;
+}
+
+export class BridgeAcpAgent extends BridgeAgent {
   private proc: ChildProcess & { stdin: NodeJS.WritableStream; stdout: NodeJS.ReadableStream };
   private rl: ReturnType<typeof createInterface>;
   private nextId = 1;
@@ -13,10 +18,13 @@ export class AcpAgentClient extends BridgeAgent {
     JsonRpcId,
     { resolve: (value: unknown) => void; reject: (err: Error) => void; timer: NodeJS.Timeout }
   >();
+  private readonly onNotification?: (method: string, params: unknown) => void;
 
-  constructor(cmd: string, args: string[] = []) {
-    super();
+  constructor(cmd: string, args: string[] = [], options: BridgeAcpAgentOptions = {}) {
+    super(cmd, args);
+    this.onNotification = options.onNotification;
     log.info(`Spawning agent: ${cmd} ${args.join(" ")}`);
+
     this.proc = spawn(cmd, args, {
       cwd: process.cwd(),
       stdio: ["pipe", "pipe", "pipe"],
@@ -47,7 +55,15 @@ export class AcpAgentClient extends BridgeAgent {
     if (!msg || typeof msg !== "object") return;
     const rec = msg as Record<string, unknown>;
     const id = rec.id;
-    if (id === undefined || id === null) return;
+
+    if (id === undefined || id === null) {
+      const method = typeof rec.method === "string" ? rec.method : "";
+      if (method && this.onNotification) {
+        this.onNotification(method, rec.params);
+      }
+      return;
+    }
+
     if (typeof id !== "string" && typeof id !== "number") return;
     const pending = this.pending.get(id);
     if (!pending) return;
@@ -83,7 +99,7 @@ export class AcpAgentClient extends BridgeAgent {
   override close(): void {
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(new Error("ACP client closed"));
+      pending.reject(new Error("ACP agent closed"));
       this.pending.delete(id);
     }
     this.rl.close();

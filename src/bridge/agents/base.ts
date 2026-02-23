@@ -3,6 +3,14 @@
  * Subclasses implement request/response with the agent process.
  */
 export abstract class BridgeAgent {
+  readonly cmd: string;
+  readonly args: string[];
+
+  constructor(cmd: string, args: string[] = []) {
+    this.cmd = cmd;
+    this.args = args;
+  }
+
   /** Send a JSON-RPC request to the agent and return the result. */
   abstract request(method: string, params: unknown, timeoutMs?: number): Promise<unknown>;
 

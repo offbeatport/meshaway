@@ -2,7 +2,15 @@ import { genId } from "../ids.js";
 import type { SessionStore } from "./store.js";
 import type { Session, Frame } from "./types.js";
 
-export function createInMemorySessionStore(): SessionStore {
+export interface CreateInMemorySessionStoreOptions {
+  /** Called when a frame is added (e.g. for SSE broadcast). */
+  onFrameAdded?: (sessionId: string, frame: Frame) => void;
+}
+
+export function createInMemorySessionStore(
+  options: CreateInMemorySessionStoreOptions = {}
+): SessionStore {
+  const { onFrameAdded } = options;
   const sessions = new Map<string, Session>();
 
   return {
@@ -63,6 +71,7 @@ export function createInMemorySessionStore(): SessionStore {
       };
       session.frames.push(frame);
       session.updatedAt = Date.now();
+      onFrameAdded?.(sessionId, frame);
       return frame;
     },
 

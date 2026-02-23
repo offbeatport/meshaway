@@ -106,7 +106,12 @@ export async function sendPlaygroundRunner(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
-  const data = (await res.json()) as PlaygroundRunnerSendResult & { error?: string };
+  let data: PlaygroundRunnerSendResult & { error?: string };
+  try {
+    data = (await res.json()) as PlaygroundRunnerSendResult & { error?: string };
+  } catch {
+    throw new Error(!res.ok ? `Request failed: ${res.status}` : "Invalid response from server");
+  }
   if (!res.ok) throw new Error(data?.error ?? `Request failed: ${res.status}`);
   return data;
 }
@@ -159,6 +164,12 @@ export async function fetchPlaygroundFrames(runnerSessionId: string): Promise<Fr
   if (!res.ok) return [];
   const data = (await res.json()) as { frames?: Frame[] };
   return Array.isArray(data?.frames) ? data.frames : [];
+}
+
+/** URL for SSE stream of frames (use with EventSource). */
+export function getPlaygroundFramesStreamUrl(runnerSessionId: string): string {
+  const base = typeof window !== "undefined" ? window.location.origin : "";
+  return `${base}${API_BASE}/playground/frames/${runnerSessionId}/stream`;
 }
 
 export async function playgroundControl(

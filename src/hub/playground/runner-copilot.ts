@@ -69,7 +69,6 @@ export interface CreateCopilotRunnerOptions {
   runnerSessionId: string;
   addFrame: AddFrameFn;
   preset: PlaygroundPreset;
-  model?: string;
 }
 
 export interface CopilotRunnerResult {
@@ -82,12 +81,15 @@ export interface CopilotRunnerResult {
 export async function createCopilotRunner(
   options: CreateCopilotRunnerOptions
 ): Promise<CopilotRunnerResult> {
-  const { addFrame, preset, model = "gpt-5" } = options;
-  const { cliPath, cliArgs } = preset;
+  const { addFrame, preset } = options;
+  const { cliPath, cliArgs, model } = preset;
   const bridgeCommand = resolveBridgeCommand(cliPath, cliArgs);
 
   addFrame("session.connecting", { cliPath, cliArgs: [...cliArgs] });
   addFrame("copilot.client.starting", { cliPath, cliArgs: [...cliArgs], model });
+  const hubBaseUrl = process.env.MESH_HUB_URL ?? "http://127.0.0.1:7337";
+  process.env.MESHAWAY_HUB_URL = hubBaseUrl;
+  process.env.MESHAWAY_RUNNER_SESSION_ID = options.runnerSessionId;
   console.error("Creating Copilot client", bridgeCommand.cmd, bridgeCommand.args);
   const client = new CopilotClient({
     cliPath: bridgeCommand.cmd || cliPath,

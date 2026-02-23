@@ -1,11 +1,12 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { log } from "../shared/logging.js";
 import { genId } from "../shared/ids.js";
-import { sessionStore } from "./store/memory.js";
+import { sessionStore, subscribeFrames } from "./store/memory.js";
 import { getDefaultAgent } from "./governance/policy.js";
 import { markKilled } from "../bridge/interceptors/killswitch.js";
 import { EMBEDDED_UI } from "./embedded-ui.generated.js";
@@ -18,6 +19,25 @@ import {
 
 /** Active runners: runnerSessionId -> Copilot session + stop. */
 const activeRunners = new Map<string, { session: CopilotSession; stop: () => Promise<void> }>();
+
+const AGENT_ERROR_PREFIX = "Agent: ";
+
+function parseAgentOrBridgeError(
+  err: unknown,
+  defaultMessage: string
+): { message: string; errorSource: "agent" | "bridge" } {
+  const rawMessage = err instanceof Error ? err.message : defaultMessage;
+  const errWithSource = err as Error & { errorSource?: "agent" | "bridge" };
+  const isAgentError =
+    errWithSource.errorSource === "agent" ||
+    (errWithSource.errorSource !== "bridge" && rawMessage.startsWith(AGENT_ERROR_PREFIX));
+  const message =
+    isAgentError && rawMessage.startsWith(AGENT_ERROR_PREFIX)
+      ? rawMessage.slice(AGENT_ERROR_PREFIX.length)
+      : rawMessage;
+  const errorSource = isAgentError ? "agent" : "bridge";
+  return { message, errorSource };
+}
 
 function findUiDir(): string | null {
   const abs = join(process.cwd(), "dist", "ui");
@@ -169,7 +189,22 @@ export function createHubApp(): Hono {
       }, 502);
     }
 
-    await active.session.send({ prompt });
+    // session.send() resolves when the prompt is accepted (returns messageId); the assistant
+    // response is delivered asynchronously via session events. The runner registers
+    // session.on((event) => addFrame(`copilot.${event.type}`, event)), so events like
+    // copilot.assistant.message and copilot.session.idle are stored as frames. The front-end
+    // polls GET /api/playground/frames/:runnerSessionId to show updates in the chat.
+    try {
+      await active.session.send({ prompt });
+    } catch (err) {
+      const { message, errorSource } = parseAgentOrBridgeError(err, "Send failed");
+      return c.json({
+        runnerSessionId,
+        status: "error",
+        error: message,
+        errorSource,
+      }, 502);
+    }
 
     return c.json({
       runnerSessionId,
@@ -182,6 +217,32 @@ export function createHubApp(): Hono {
     const runnerSessionId = c.req.param("runnerSessionId");
     const frames = sessionStore.getFrames(runnerSessionId);
     return c.json({ frames });
+  });
+
+  app.get("/api/playground/frames/:runnerSessionId/stream", (c) => {
+    const runnerSessionId = c.req.param("runnerSessionId");
+    if (!runnerSessionId) return c.json({ error: "runnerSessionId required" }, 400);
+    return streamSSE(c, async (stream) => {
+      const initial = sessionStore.getFrames(runnerSessionId);
+      await stream.writeSSE({
+        data: JSON.stringify(initial),
+        event: "sync",
+      });
+      await new Promise<void>((resolve) => {
+        const unsubscribe = subscribeFrames(runnerSessionId, (frame) => {
+          stream
+            .writeSSE({ data: JSON.stringify(frame), event: "frame" })
+            .catch(() => {
+              unsubscribe();
+              resolve();
+            });
+        });
+        c.req.raw.signal?.addEventListener?.("abort", () => {
+          unsubscribe();
+          resolve();
+        });
+      });
+    });
   });
 
   app.post("/api/playground/session", async (c) => {
@@ -213,25 +274,14 @@ export function createHubApp(): Hono {
         addFrame,
         preset,
       });
-      console.log("Copilot runner created", runnerSessionId, session, stop);
       activeRunners.set(runnerSessionId, { session, stop });
-      console.log("Active runners", activeRunners);
       return c.json({
         runnerSessionId,
         bridgeType: "stdio"
       });
     } catch (err) {
       console.error("Error creating Copilot runner", err);
-      const rawMessage = err instanceof Error ? err.message : "Failed to start agent";
-      const errWithSource = err as Error & { errorSource?: "agent" | "bridge" };
-      const agentPrefix = "Agent: ";
-      const isAgentError =
-        errWithSource.errorSource === "agent" ||
-        (errWithSource.errorSource !== "bridge" && rawMessage.startsWith(agentPrefix));
-      const message = isAgentError && rawMessage.startsWith(agentPrefix)
-        ? rawMessage.slice(agentPrefix.length)
-        : rawMessage;
-      const errorSource = isAgentError ? "agent" : "bridge";
+      const { message, errorSource } = parseAgentOrBridgeError(err, "Failed to start agent");
       sessionStore.addFrame(runnerSessionId, "session.error", { message, errorSource }, false);
       return c.json({ error: message, runnerSessionId, errorSource }, 502);
     }
@@ -324,6 +374,8 @@ export function createHubApp(): Hono {
 export async function startHub(options: HubServeOptions): Promise<HubHandle> {
   const app = createHubApp();
   const { host, port } = options;
+  const hubBaseUrl = process.env.MESH_HUB_URL ?? `http://${host}:${port}`;
+  process.env.MESH_HUB_URL = hubBaseUrl;
 
   const nodeServer = serve({
     fetch: app.fetch,

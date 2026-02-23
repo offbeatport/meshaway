@@ -1,8 +1,9 @@
 import { BridgeAgent } from "./agents/base.js";
-import { AcpAgentClient } from "./agents/acp.js";
+import { BridgeAcpAgent } from "./agents/acp.js";
 import { log } from "../shared/logging.js";
 import { jsonRpcError, jsonRpcResult } from "../protocols/jsonrpc/response.js";
 import { parseEnvelope, isRequest } from "../protocols/jsonrpc/validate.js";
+import { VERSION } from "../shared/constants.js";
 import {
   createInMemorySessionStore,
   createCompositeSessionStore,
@@ -22,6 +23,8 @@ export interface BridgeEngineOptions {
   agentArgs?: string[];
   adapter: BridgeAdapterKind;
   hubUrl?: string;
+  /** When set with hubUrl, frames are reported to the hub under this session id (e.g. playground runner). */
+  runnerSessionId?: string;
   sessionStore?: SessionStore;
 }
 
@@ -40,13 +43,37 @@ export class BridgeEngine {
     const local = opts.sessionStore ?? createInMemorySessionStore();
     const hasHub = typeof opts.hubUrl === "string" && opts.hubUrl.length > 0;
     this.sessionStore = hasHub
-      ? createCompositeSessionStore([local, createHubReplicaStore(createHubLinkClient(opts.hubUrl!))])
+      ? createCompositeSessionStore([
+        local,
+        createHubReplicaStore(createHubLinkClient(opts.hubUrl!), {
+          reportSessionId: opts.runnerSessionId,
+        }),
+      ])
       : local;
 
-    log.info(`Starting bridge: adapter=${opts.adapter}, agent=${opts.agent} ${opts.agentArgs?.join(" ") ?? ""}`);
+    // log.info(`Starting bridge: adapter=${opts.adapter}, agent=${opts.agent} ${opts.agentArgs?.join(" ") ?? ""}`);
 
-    this.agent = new AcpAgentClient(opts.agent, opts.agentArgs ?? []);
+    this.agent = new BridgeAcpAgent(opts.agent, opts.agentArgs ?? [], {
+      onNotification: (method, params) => this.handleAgentNotification(method, params),
+    });
     this.adapter = createBridgeAdapter(opts.adapter, this.getAdapterContext());
+  }
+
+  private resolveLocalSessionId(agentSessionId: string): string | undefined {
+    for (const [localId, aId] of this.localToAgentSession) {
+      if (aId === agentSessionId) return localId;
+    }
+    return undefined;
+  }
+
+  private handleAgentNotification(method: string, params: unknown): void {
+    if (method !== "session/update") return;
+    const rec = params && typeof params === "object" ? (params as Record<string, unknown>) : null;
+    const agentSessionId = rec && typeof rec.sessionId === "string" ? rec.sessionId : null;
+    if (!agentSessionId) return;
+    const localSessionId = this.resolveLocalSessionId(agentSessionId) ?? agentSessionId;
+    this.sessionStore.ensureSession(localSessionId);
+    this.sessionStore.addFrame(localSessionId, "acp.session/update", params, false);
   }
 
   close(): void {
@@ -81,7 +108,7 @@ export class BridgeEngine {
       addFrame: (sessionId, type, payload, redacted) => store.addFrame(sessionId, type, payload, redacted ?? true),
       updateSessionStatus: (id, status) => store.updateSession(id, { status }),
       getLocalToAgentSession: () => this.localToAgentSession,
-      setLocalToAgentSession: this.localToAgentSession.set,
+      setLocalToAgentSession: (localId, agentId) => this.localToAgentSession.set(localId, agentId),
     };
   }
 
@@ -114,7 +141,7 @@ export class BridgeEngine {
           status: 200,
           payload: jsonRpcResult(reqId, {
             protocolVersion: 1,
-            serverInfo: { name: "meshaway", version: "0.1.0" },
+            serverInfo: { name: "meshaway", version: VERSION },
           }),
         };
       }

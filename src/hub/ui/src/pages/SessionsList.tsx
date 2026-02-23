@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Activity,
   RefreshCw,
@@ -11,6 +11,7 @@ import {
   ChevronUp,
   ArrowUpDown,
   Filter,
+  Play,
 } from "lucide-react";
 import { useSessions } from "@/lib/useApi";
 import { formatRelativeTime, formatDateTime, truncateId, formatDuration } from "@/lib/format";
@@ -61,6 +62,7 @@ function sessionTokens(s: Session): number {
 }
 
 export function SessionsList() {
+  const navigate = useNavigate();
   const { sessions, loading, error, refresh } = useSessions(4000);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("startTime");
@@ -428,15 +430,29 @@ export function SessionsList() {
                       {(s as Session & { agent?: string }).agent ?? "—"}
                     </td>
                     <td className="py-3 px-4">
-                      <a
-                        href={getSessionExportUrl(s.id)}
-                        download={`session-${s.id}.jsonl`}
-                        className="inline-flex items-center gap-1 text-xs text-sky-400/90 hover:text-sky-400"
-                        title="Export JSONL"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        Export
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            navigate(`/playground?loadSessionId=${encodeURIComponent(s.id)}`);
+                          }}
+                          className="inline-flex items-center gap-1 text-xs text-sky-400/90 hover:text-sky-400"
+                          title="Open in Playground"
+                        >
+                          <Play className="h-3.5 w-3.5" />
+                          Playground
+                        </button>
+                        <a
+                          href={getSessionExportUrl(s.id)}
+                          download={`session-${s.id}.jsonl`}
+                          className="inline-flex items-center gap-1 text-xs text-sky-400/90 hover:text-sky-400"
+                          title="Export JSONL"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Export
+                        </a>
+                      </div>
                     </td>
                   </tr>
                 ))

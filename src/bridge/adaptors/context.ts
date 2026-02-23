@@ -2,7 +2,7 @@ import type { BridgeAgent } from "../agents/base.js";
 
 /** Context the engine passes to each bridge adapter. */
 export interface AdapterContext {
-  readonly agent: BridgeAgent | null;
+  readonly agent: BridgeAgent;
   resolveAgentSessionId(localSessionId: string): string;
   ensureSession(localSessionId: string): void;
   addFrame(sessionId: string, type: string, payload: unknown, redacted?: boolean): void;

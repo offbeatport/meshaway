@@ -1,3 +1,6 @@
+/** Project version (keep in sync with package.json). */
+export const VERSION = "0.1.0";
+
 /** Default listen addresses per init02 spec. */
 export const DEFAULT_BRIDGE_LISTEN = "127.0.0.1:4321";
 export const DEFAULT_HUB_LISTEN = "127.0.0.1:7337";

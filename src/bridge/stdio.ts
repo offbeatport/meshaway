@@ -21,12 +21,24 @@ function readContentLengthHeader(header: string): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
+export interface StdioBridgeOptions {
+  hubUrl?: string;
+  runnerSessionId?: string;
+}
+
 export async function runStdioBridge(
   adapter: BridgeAdapterKind,
   agent: string,
-  agentArgs: string[] = []
+  agentArgs: string[] = [],
+  options: StdioBridgeOptions = {}
 ): Promise<void> {
-  const engine = new BridgeEngine({ adapter, agent, agentArgs });
+  const engine = new BridgeEngine({
+    adapter,
+    agent,
+    agentArgs,
+    hubUrl: options.hubUrl,
+    runnerSessionId: options.runnerSessionId,
+  });
   try {
     await engine.startAgent();
   } catch (err) {

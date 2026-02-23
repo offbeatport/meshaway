@@ -5,33 +5,29 @@
  */
 
 import { genId } from "../../shared/ids.js";
+import { VERSION } from "../../shared/constants.js";
 import { CopilotPromptParamsSchema } from "../../protocols/copilot/types.js";
 import { assertSchema } from "../../protocols/assert.js";
 import { redactPayload } from "../interceptors/redaction.js";
 import { BridgeAdapter } from "./base.js";
 import type { BridgeResponse, JsonRpcId } from "./types.js";
+import { log } from "../../shared/logging.js";
 
 type CopilotHandler = (id: JsonRpcId, params: unknown) => BridgeResponse | Promise<BridgeResponse>;
+
+const GITHUB_AGENT_RUNTIME_VERSION = 2;
 
 export class CopilotAdapter extends BridgeAdapter {
   private readonly handlers: Record<string, CopilotHandler> = {
     "ping": (id, params) => this.handlePing(id, params),
     "status.get": (id) => this.handleStatusGet(id),
-    "auth.getStatus": (id) => this.handleAuthGetStatus(id),
-    "models.list": (id) => this.handleModelsList(id),
     "tools.list": (id) => this.handleToolsList(id),
     "account.getQuota": (id) => this.handleAccountGetQuota(id),
     "session.create": (id, params) => this.handleSessionCreate(id, params),
-    "session.resume": (id, params) => this.handleSessionResume(id, params),
     "session.send": (id, params) => this.handleSessionSend(id, params),
     "session.destroy": (id, params) => this.handleSessionDestroy(id, params),
     "session.abort": (id, params) => this.handleSessionAbort(id, params),
-    "session.list": (id) => this.handleSessionList(id),
     "session.delete": (id, params) => this.handleSessionDelete(id, params),
-    "session.getMessages": (id, params) => this.handleSessionGetMessages(id, params),
-    "session.getLastId": (id, params) => this.handleSessionGetLastId(id, params),
-    "session.getForeground": (id) => this.handleSessionGetForeground(id),
-    "session.setForeground": (id, params) => this.handleSessionSetForeground(id, params),
     "session.model.getCurrent": (id, params) => this.handleSessionModelGetCurrent(id, params),
     "session.model.switchTo": (id, params) => this.handleSessionModelSwitchTo(id, params),
     "session.mode.get": (id, params) => this.handleSessionModeGet(id, params),
@@ -53,8 +49,13 @@ export class CopilotAdapter extends BridgeAdapter {
 
   async handle(id: JsonRpcId, method: string, params: unknown): Promise<BridgeResponse> {
     const handler = this.handlers[method];
+    // log.info(params, `REQ: ${method}`);
     if (!handler) return this.error(id, -32601, `Method not implemented: ${method}`);
-    return handler(id, params);
+
+    const resp = await handler(id, params);
+    // log.info(resp, "RESP: handled method");
+    return resp;
+
   }
 
   // --- Server-scoped methods -------------------------------------------------
@@ -63,53 +64,23 @@ export class CopilotAdapter extends BridgeAdapter {
     const rec = (params ?? {}) as { message?: unknown };
     const message = typeof rec.message === "string" ? rec.message : "ok";
 
-    // Map Copilot `ping` → ACP `initialize` on the agent.
     await this.requestAgent("initialize", {
       protocolVersion: 1,
       clientCapabilities: {},
-      clientInfo: { name: "meshaway-copilot-bridge", version: "0.1.0" },
+      clientInfo: { name: "meshaway-copilot-bridge", version: VERSION },
     });
 
     return this.result(id, {
       message,
       timestamp: Date.now(),
-      protocolVersion: 1,
+      protocolVersion: GITHUB_AGENT_RUNTIME_VERSION,
     });
   }
 
   private handleStatusGet(id: JsonRpcId): BridgeResponse {
     return this.result(id, {
-      version: "0.1.0",
-      protocolVersion: 1,
-    });
-  }
-
-  private handleAuthGetStatus(id: JsonRpcId): BridgeResponse {
-    return this.result(id, {
-      isAuthenticated: false,
-      authType: undefined,
-      statusMessage:
-        "Authentication is managed by the underlying agent. Configure GEMINI_API_KEY / etc. for meshaway agents.",
-    });
-  }
-
-  private handleModelsList(id: JsonRpcId): BridgeResponse {
-    // Minimal, generic model description. The SDK mostly needs that at least one model exists.
-    return this.result(id, {
-      models: [
-        {
-          id: "default",
-          name: "Default",
-          capabilities: {
-            supports: { vision: false, reasoningEffort: false },
-            limits: { max_context_window_tokens: 8192 },
-          },
-          policy: { state: "enabled", terms: "" },
-          billing: { multiplier: 1 },
-          supportedReasoningEfforts: [],
-          defaultReasoningEffort: undefined,
-        },
-      ],
+      version: VERSION,
+      protocolVersion: GITHUB_AGENT_RUNTIME_VERSION,
     });
   }
 
@@ -131,12 +102,12 @@ export class CopilotAdapter extends BridgeAdapter {
         ? rec.sessionId
         : genId("sess");
     this.ensureSession(localSessionId);
-
     if (!this.getLocalToAgentSession().has(localSessionId)) {
       const newSessionResult = (await this.requestAgent("session/new", {
         cwd: process.cwd(),
         mcpServers: rec.mcpServers ?? [],
       })) as Record<string, unknown> | undefined;
+
       const agentSessionId =
         typeof newSessionResult?.sessionId === "string"
           ? newSessionResult.sessionId
@@ -148,13 +119,6 @@ export class CopilotAdapter extends BridgeAdapter {
       sessionId: localSessionId,
       workspacePath: null,
     });
-  }
-
-  private handleSessionResume(id: JsonRpcId, params: unknown): BridgeResponse {
-    const rec = (params ?? {}) as Record<string, unknown>;
-    const sessionId = typeof rec.sessionId === "string" ? rec.sessionId : genId("sess");
-    this.ensureSession(sessionId);
-    return this.result(id, { sessionId, workspacePath: null });
   }
 
   private async handleSessionSend(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
@@ -175,11 +139,6 @@ export class CopilotAdapter extends BridgeAdapter {
     return this.handleCancel(id, params);
   }
 
-  private handleSessionList(id: JsonRpcId): BridgeResponse {
-    const sessions = Array.from(this.getLocalToAgentSession().keys());
-    return this.result(id, { sessions });
-  }
-
   private handleSessionDelete(id: JsonRpcId, params: unknown): BridgeResponse {
     const rec = (params ?? {}) as Record<string, unknown>;
     const sessionId = typeof rec.sessionId === "string" ? rec.sessionId : undefined;
@@ -188,26 +147,6 @@ export class CopilotAdapter extends BridgeAdapter {
       this.updateSessionStatus(sessionId, "killed");
     }
     return this.result(id, {});
-  }
-
-  private handleSessionGetMessages(id: JsonRpcId, _params: unknown): BridgeResponse {
-    // Bridge does not persist full message history; return empty.
-    return this.result(id, { messages: [] });
-  }
-
-  private handleSessionGetLastId(id: JsonRpcId, _params: unknown): BridgeResponse {
-    // We don't track message IDs; return null.
-    return this.result(id, { lastId: null });
-  }
-
-  private handleSessionGetForeground(id: JsonRpcId): BridgeResponse {
-    const sessions = Array.from(this.getLocalToAgentSession().keys());
-    return this.result(id, { sessionId: sessions[0] ?? null });
-  }
-
-  private handleSessionSetForeground(id: JsonRpcId, _params: unknown): BridgeResponse {
-    // No-op for now; we don't track foregroundness.
-    return this.result(id, { ok: true });
   }
 
   // --- Session configuration / workspace helpers -----------------------------
@@ -226,7 +165,6 @@ export class CopilotAdapter extends BridgeAdapter {
   }
 
   private handleSessionModeGet(id: JsonRpcId, params: unknown): BridgeResponse {
-    const _rec = (params ?? {}) as Record<string, unknown>;
     return this.result(id, { mode: "interactive" as const });
   }
 

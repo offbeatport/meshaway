@@ -17,6 +17,34 @@ import { runStdioBridge } from "./bridge/stdio.js";
 
 // --- utils ---
 
+/**
+ * Flags the Copilot SDK appends when it spawns the "CLI" (our bridge). Strip them
+ * so they don't affect our parsing or get passed through (see github/copilot-sdk
+ * nodejs/src/client.ts startCLIServer).
+ */
+const COPILOT_SDK_STRIP_FLAGS = new Set([
+  "--headless",
+  "--no-auto-update",
+  "--stdio",
+  "--no-auto-login",
+  "--auth-token-env",
+  "--log-level",
+  "--port",
+]);
+
+function stripCopilotSdkArgs(argv: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (COPILOT_SDK_STRIP_FLAGS.has(arg)) {
+      if (arg === "--log-level" || arg === "--port" || arg === "--auth-token-env") i++;
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
+}
+
 function openBrowser(url: string): void {
   const [cmd, args] =
     process.platform === "darwin"
@@ -152,10 +180,16 @@ export function createProgram(): Command {
       try {
         initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
 
+        const hubUrl =
+          (opts.hubUrl as string) ||
+          process.env.MESHAWAY_HUB_URL ||
+          "";
+        const runnerSessionId = process.env.MESHAWAY_RUNNER_SESSION_ID ?? "";
         await runStdioBridge(
           opts.adapter as BridgeAdapterKind,
           opts.agent as string,
-          opts.agentArgs as string[]
+          opts.agentArgs as string[],
+          { hubUrl: hubUrl || undefined, runnerSessionId: runnerSessionId || undefined }
         );
       } catch (err) {
         log.error(String(err));
@@ -167,4 +201,10 @@ export function createProgram(): Command {
 }
 
 initLogger("info", "text");
+
+// When running as bridge, strip Copilot SDK-injected args so they don't confuse parsing
+if (process.argv.includes("bridge")) {
+  process.argv = [process.argv[0], process.argv[1], ...stripCopilotSdkArgs(process.argv.slice(2))];
+}
+
 createProgram().parse();

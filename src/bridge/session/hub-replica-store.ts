@@ -2,11 +2,20 @@ import type { HubLinkClient } from "../hublink/client.js";
 import type { SessionStore } from "../../shared/session/store.js";
 import type { Session, Frame } from "../../shared/session/types.js";
 
+export interface CreateHubReplicaStoreOptions {
+  /** When set, all addFrame reports use this session id (e.g. playground runner session). */
+  reportSessionId?: string;
+}
+
 /**
  * Write-only SessionStore that forwards writes to the hub via HubLinkClient.
  * Reads (getSession, listSessions, getFrames) are no-ops; use the primary store for reads.
  */
-export function createHubReplicaStore(hubLink: HubLinkClient): SessionStore {
+export function createHubReplicaStore(
+  hubLink: HubLinkClient,
+  options: CreateHubReplicaStoreOptions = {}
+): SessionStore {
+  const { reportSessionId } = options;
   function fireAndForget(promise: Promise<void>): void {
     promise.catch(() => {});
   }
@@ -50,7 +59,8 @@ export function createHubReplicaStore(hubLink: HubLinkClient): SessionStore {
     },
 
     addFrame(sessionId: string, type: string, payload: unknown): Frame | undefined {
-      fireAndForget(hubLink.reportFrame(sessionId, type, payload));
+      const targetId = reportSessionId ?? sessionId;
+      fireAndForget(hubLink.reportFrame(targetId, type, payload));
       return undefined;
     },
 
