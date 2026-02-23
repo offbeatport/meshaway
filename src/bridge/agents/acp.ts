@@ -28,6 +28,13 @@ export class AcpAgentClient extends BridgeAgent {
     this.proc.stderr?.on("data", (chunk: Buffer | string) => {
       log.error(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
     });
+
+    // Use "close" not "exit" so we don't process.exit() before the event loop
+    // has delivered the last stdout/stderr chunks (and thus don't miss final messages).
+    this.proc.on("close", (code, signal) => {
+      log.info({ code, signal }, "Agent process exited");
+      process.exit(code ?? 1);
+    });
   }
 
   private onLine(line: string): void {

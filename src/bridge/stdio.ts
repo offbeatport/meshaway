@@ -22,11 +22,11 @@ function readContentLengthHeader(header: string): number | null {
 }
 
 export async function runStdioBridge(
-  client: BridgeAdapterKind,
+  adapter: BridgeAdapterKind,
   agent: string,
   agentArgs: string[] = []
 ): Promise<void> {
-  const engine = new BridgeEngine({ client, agent, agentArgs });
+  const engine = new BridgeEngine({ adapter, agent, agentArgs });
   try {
     await engine.startAgent();
   } catch (err) {

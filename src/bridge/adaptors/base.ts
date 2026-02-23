@@ -20,7 +20,8 @@ export abstract class BridgeAdapter {
   /** Handle the request and return a JSON-RPC response. */
   abstract handle(id: JsonRpcId, method: string, params: unknown): Promise<BridgeResponse>;
 
-  protected async requestAcp(method: string, params: unknown): Promise<unknown> {
+  /** Send a request to the configured agent (e.g. ACP over stdio). */
+  protected async requestAgent(method: string, params: unknown): Promise<unknown> {
     if (!this.ctx.agent) {
       const err = new Error("Agent not configured") as Error & { code?: number };
       err.code = -32001;

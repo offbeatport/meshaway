@@ -37,7 +37,7 @@ export class CopilotAdapter extends BridgeAdapter {
     this.addFrame(localSessionId, "copilot.prompt", redactPayload(parsed), true);
 
     if (!this.getLocalToAgentSession().has(localSessionId)) {
-      const newSessionResult = (await this.requestAcp("session/new", {
+      const newSessionResult = (await this.requestAgent("session/new", {
         cwd: process.cwd(),
         mcpServers: [],
       })) as Record<string, unknown> | undefined;
@@ -49,7 +49,7 @@ export class CopilotAdapter extends BridgeAdapter {
     }
 
     const agentSessionId = this.resolveAgentSessionId(localSessionId);
-    const result = await this.requestAcp("session/prompt", {
+    const result = await this.requestAgent("session/prompt", {
       sessionId: agentSessionId,
       prompt: [{ type: "text", text: promptText }],
     });

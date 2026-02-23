@@ -21,6 +21,11 @@ import {
   playgroundControl,
   type Frame,
 } from "@/lib/api";
+import {
+  PLAYGROUND_PRESETS,
+  DEFAULT_PLAYGROUND_PRESET_ID,
+  type PlaygroundPresetId,
+} from "@hub/playground/presets";
 
 function formatFrameValue(v: unknown): string {
   if (v === null) return "null";
@@ -83,26 +88,8 @@ function FrameRow({ frame }: { frame: Frame }) {
   );
 }
 
-type PipelineId = "copilot-stdio-gemini" | "copilot-stdio-claude" | "copilot-stdio-opencode";
-
-const PIPELINE_OPTIONS: {
-  value: PipelineId;
-  label: string;
-  part1: string;
-  part2: string;
-  part3: string;
-  /** Agent command (e.g. "meshaway"). User specifies CLI path locally. */
-  agentCommand: string;
-  /** Agent args to spawn bridge (e.g. ["bridge", "--agent", "gemini"]). */
-  agentArgs: string[];
-}[] = [
-    { value: "copilot-stdio-gemini", label: "Github Copilot SDK > stdio: Bridge >  Gemini", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: " Gemini", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "gemini"] },
-    { value: "copilot-stdio-claude", label: "Github Copilot SDK > stdio: Bridge >  Claude Code", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: " Claude Code", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "claude"] },
-    { value: "copilot-stdio-opencode", label: "Github Copilot SDK > stdio: Bridge >  OpenCode", part1: "Github Copilot SDK", part2: "stdio: Bridge", part3: " OpenCode", agentCommand: "meshaway", agentArgs: ["bridge", "--agent", "opencode"] },
-  ];
-
 export function Playground() {
-  const [selectedPipeline, setSelectedPipeline] = useState<PipelineId>("copilot-stdio-gemini");
+  const [selectedPipeline, setSelectedPipeline] = useState<PlaygroundPresetId>(DEFAULT_PLAYGROUND_PRESET_ID);
   const [runnerSessionId, setRunnerSessionId] = useState("");
   const [sessionId, setSessionId] = useState("");
   const runnerSessionIdRef = useRef("");
@@ -127,7 +114,7 @@ export function Playground() {
 
   const activeRunnerSessionId = lastResult?.runnerSessionId ?? runnerSessionId;
   runnerSessionIdRef.current = activeRunnerSessionId;
-  const selectedOption = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
+  const selectedOption = PLAYGROUND_PRESETS.find((p) => p.id === selectedPipeline) ?? PLAYGROUND_PRESETS[0];
   const lastSessionErrorFrame = [...frames].reverse().find((f) => f.type === "session.error");
   const sessionErrorPayload =
     lastSessionErrorFrame?.payload && typeof lastSessionErrorFrame.payload === "object"
@@ -158,17 +145,16 @@ export function Playground() {
             ? "Failed to connect"
             : "Connecting...";
 
-  const handlePipelineChange = (value: PipelineId) => {
-    const option = PIPELINE_OPTIONS.find((p) => p.value === value);
-    if (!option) return;
+  const handlePipelineChange = (value: PlaygroundPresetId) => {
+    if (!PLAYGROUND_PRESETS.some((p) => p.id === value)) return;
     setSelectedPipeline(value);
   };
   const agentArgsJson =
     "[\n" +
-    selectedOption.agentArgs.map((a) => `    "${a}"`).join(",\n") +
+    selectedOption.cliArgs.map((a) => `    "${a}"`).join(",\n") +
     ",\n  ]";
   const clientCode = `const client = new CopilotClient({
-  cliPath: "meshaway",
+  cliPath: "${selectedOption.cliPath}",
   cliArgs: ${agentArgsJson},
 });`;
 
@@ -191,10 +177,9 @@ export function Playground() {
     setSessionError(null);
     setSessionErrorSource(null);
     setIsConnecting(true);
-    const option = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
+    const option = PLAYGROUND_PRESETS.find((p) => p.id === selectedPipeline) ?? PLAYGROUND_PRESETS[0];
     createPlaygroundSession({
-      cliPath: option.agentCommand,
-      cliArgs: option.agentArgs,
+      presetId: option.id,
     })
       .then(({ runnerSessionId: id, bridgeType, agentExec, agentArgs }) => {
         setRunnerSessionId(id);
@@ -249,11 +234,8 @@ export function Playground() {
     if (!prompt.trim()) return;
     setSending(true);
     setLastResult(null);
-    const option = PIPELINE_OPTIONS.find((p) => p.value === selectedPipeline) ?? PIPELINE_OPTIONS[0];
     try {
       const res = await sendPlaygroundRunner({
-        agentCommand: option.agentCommand,
-        agentArgs: option.agentArgs,
         prompt: prompt.trim(),
         runnerSessionId: activeRunnerSessionId || undefined,
       });
@@ -297,13 +279,18 @@ export function Playground() {
         <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
           <div className="flex flex-col max-w-md">
 
-            <AppSelect<PipelineId>
+            <AppSelect<PlaygroundPresetId>
               value={selectedPipeline}
               onValueChange={handlePipelineChange}
-              items={PIPELINE_OPTIONS.map((p) => ({
-                value: p.value,
-                label: `${p.part1} → Meshaway Bridge → ${p.part3}`,
-                mutedSegment: p.part3.startsWith(" ") ? " → Meshaway Bridge →  " : undefined,
+              items={PLAYGROUND_PRESETS.map((p) => ({
+                value: p.id,
+                label: (
+                  <span className="inline-flex flex-wrap items-baseline gap-x-1">
+                    <span>{p.from}</span>
+                    <span className="text-zinc-500">→ Meshaway Bridge →</span>
+                    <span>{p.to}</span>
+                  </span>
+                ),
               }))}
               placeholder="Select a pipeline configuration..."
             />

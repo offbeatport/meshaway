@@ -137,7 +137,7 @@ export function createProgram(): Command {
     .option("--agent <specifier>", "Agent command specifier (e.g. gemini)")
     .option("--agent-args <args...>", "Extra arguments for the agent")
     .addOption(
-      createOption("--client <client>", "Client adapter")
+      createOption("--adapter <adapter>", "Client adapter")
         .choices([...BRIDGE_ADAPTER_KINDS])
         .default("copilot")
     )
@@ -153,7 +153,7 @@ export function createProgram(): Command {
         initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
 
         await runStdioBridge(
-          opts.client as BridgeAdapterKind,
+          opts.adapter as BridgeAdapterKind,
           opts.agent as string,
           opts.agentArgs as string[]
         );

@@ -11,6 +11,7 @@ export type AddFrameFn = (type: string, payload: unknown) => void;
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "../../shared/logging.js";
+import type { PlaygroundPreset } from "./presets.js";
 
 
 function extractAgentFromArgs(args: string[]): string {
@@ -67,8 +68,7 @@ export function resolveBridgeCommand(
 export interface CreateCopilotRunnerOptions {
   runnerSessionId: string;
   addFrame: AddFrameFn;
-  cliPath: string;
-  cliArgs: string[];
+  preset: PlaygroundPreset;
   model?: string;
 }
 
@@ -82,18 +82,22 @@ export interface CopilotRunnerResult {
 export async function createCopilotRunner(
   options: CreateCopilotRunnerOptions
 ): Promise<CopilotRunnerResult> {
-  const { addFrame, cliPath, cliArgs, model = "gpt-5" } = options;
+  const { addFrame, preset, model = "gpt-5" } = options;
+  const { cliPath, cliArgs } = preset;
   const bridgeCommand = resolveBridgeCommand(cliPath, cliArgs);
 
+  addFrame("session.connecting", { cliPath, cliArgs: [...cliArgs] });
   addFrame("copilot.client.starting", { cliPath, cliArgs: [...cliArgs], model });
+  console.error("Creating Copilot client", bridgeCommand.cmd, bridgeCommand.args);
   const client = new CopilotClient({
     cliPath: bridgeCommand.cmd || cliPath,
     cliArgs: bridgeCommand.args || cliArgs,
     useStdio: true,
     autoStart: false,
   });
+  console.error("Starting Copilot client ...");
   await client.start();
-
+  console.error("Copilot client started");
   addFrame("copilot.client.started", { cliPath, cliArgs: [...cliArgs], model });
 
   let session: CopilotSession;

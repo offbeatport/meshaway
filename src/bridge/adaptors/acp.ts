@@ -30,7 +30,7 @@ export class AcpAdapter extends BridgeAdapter {
   async handle(id: JsonRpcId, method: string, params: unknown): Promise<BridgeResponse> {
     if (method === "session/new") {
       const valid = assertSchema(AcpNewSessionParamsSchema, params, "acp session/new params");
-      const result = (await this.requestAcp("session/new", valid)) as Record<string, unknown>;
+      const result = (await this.requestAgent("session/new", valid)) as Record<string, unknown>;
       const agentSessionId =
         typeof result?.sessionId === "string" ? result.sessionId : genId("sess");
       this.getLocalToAgentSession().set(agentSessionId, agentSessionId);
@@ -48,7 +48,7 @@ export class AcpAdapter extends BridgeAdapter {
       this.ensureSession(localSessionId);
       const agentSessionId = this.resolveAgentSessionId(localSessionId);
       const payload = { ...valid, sessionId: agentSessionId };
-      const result = await this.requestAcp("session/prompt", payload);
+      const result = await this.requestAgent("session/prompt", payload);
       this.addFrame(localSessionId, "acp.session/prompt", redactPayload(payload), true);
       this.addFrame(localSessionId, "acp.session/prompt.result", redactPayload(result), true);
       return this.result(id, result);
@@ -57,7 +57,7 @@ export class AcpAdapter extends BridgeAdapter {
     if (method === "session/cancel") {
       const valid = assertSchema(AcpSessionCancelParamsSchema, params, "acp session/cancel params");
       const agentSessionId = this.resolveAgentSessionId(valid.sessionId);
-      const result = await this.requestAcp("session/cancel", {
+      const result = await this.requestAgent("session/cancel", {
         ...valid,
         sessionId: agentSessionId,
       });

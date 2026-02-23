@@ -1,4 +1,5 @@
 import { Select } from "@base-ui/react/select";
+import type { ReactNode } from "react";
 
 const SELECT_TRIGGER_CLASS =
   "flex h-10 w-full items-center justify-between gap-3 rounded-md border border-zinc-700 bg-zinc-900/80 pr-3 pl-3.5 text-sm text-zinc-100 select-none hover:bg-zinc-800/70 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-sky-500/70 data-[popup-open]:bg-zinc-800/70";
@@ -36,12 +37,8 @@ function CheckIcon() {
 
 export interface AppSelectItem<T> {
   value: T;
-  label: string;
-  /** Mute a prefix of the label (prefix shown in zinc-500, rest normal). */
-  mutedPrefix?: string;
-  selectedPrefix?: string;
-  /** Mute only this substring in the label (e.g. " "). Rest of label stays normal. */
-  mutedSegment?: string;
+  /** Label can be plain text or JSX. */
+  label: ReactNode;
 }
 
 export interface AppSelectProps<T> {
@@ -75,27 +72,6 @@ export function AppSelect<T extends string>({
               ? items.find((item) => item.value === selectedValue)
               : undefined;
             if (!selected) return undefined;
-            if (selected.mutedSegment && selected.label.includes(selected.mutedSegment)) {
-              const i = selected.label.indexOf(selected.mutedSegment);
-              const before = selected.label.slice(0, i);
-              const after = selected.label.slice(i + selected.mutedSegment.length);
-              return (
-                <>
-                  {before}
-                  <span className="text-zinc-500">{selected.mutedSegment}</span>
-                  {after}
-                </>
-              );
-            }
-            if (selected.mutedPrefix && selected.label.startsWith(selected.mutedPrefix)) {
-              const selectedPrefix = selected.selectedPrefix ?? selected.mutedPrefix;
-              return (
-                <>
-                  <span className="text-zinc-500">{selectedPrefix}</span>
-                  {selected.label.slice(selected.mutedPrefix.length)}
-                </>
-              );
-            }
             return selected.label;
           }}
         </Select.Value>
@@ -108,7 +84,7 @@ export function AppSelect<T extends string>({
           <Select.Popup className={SELECT_POPUP_CLASS}>
             <Select.ScrollUpArrow className="top-0 z-[1] flex h-4 w-full cursor-default items-center justify-center rounded-md bg-zinc-900 text-center text-xs before:absolute data-[side=none]:before:top-[-100%] before:left-0 before:h-full before:w-full before:content-['']" />
             <Select.List className={SELECT_LIST_CLASS}>
-              {items.map(({ value: itemValue, label, mutedPrefix, mutedSegment }) => (
+              {items.map(({ value: itemValue, label }) => (
                 <Select.Item
                   key={String(itemValue)}
                   value={itemValue}
@@ -118,27 +94,7 @@ export function AppSelect<T extends string>({
                     <CheckIcon />
                   </Select.ItemIndicator>
                   <Select.ItemText className={SELECT_ITEM_TEXT_CLASS}>
-                    {mutedSegment && label.includes(mutedSegment) ? (
-                      (() => {
-                        const i = label.indexOf(mutedSegment);
-                        const before = label.slice(0, i);
-                        const after = label.slice(i + mutedSegment.length);
-                        return (
-                          <>
-                            {before}
-                            <span className="text-zinc-500">{mutedSegment}</span>
-                            {after}
-                          </>
-                        );
-                      })()
-                    ) : mutedPrefix && label.startsWith(mutedPrefix) ? (
-                      <>
-                        <span className="text-zinc-500">{mutedPrefix}</span>
-                        {label.slice(mutedPrefix.length)}
-                      </>
-                    ) : (
-                      label
-                    )}
+                    {label}
                   </Select.ItemText>
                 </Select.Item>
               ))}

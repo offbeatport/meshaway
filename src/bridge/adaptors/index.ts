@@ -1,6 +1,6 @@
 /**
  * Bridge adapters: bridge is started with a single adapter (--client copilot | claude | acp).
- * - BridgeAdapter: abstract base with shared helpers (requestAcp, addFrame, ensureSession, …).
+ * - BridgeAdapter: abstract base with shared helpers (requestAgent, addFrame, ensureSession, …).
  * - AcpAdapter: client speaks ACP → forward to agent → ACP response (passthrough).
  * - CopilotAdapter: client speaks Copilot → convert to ACP → agent → convert back to Copilot.
  * - ClaudeAdapter: stub for Claude protocol.
@@ -31,5 +31,7 @@ export function createBridgeAdapter(kind: BridgeAdapterKind, ctx: AdapterContext
       return new CopilotAdapter(ctx);
     case "claude":
       return new ClaudeAdapter(ctx);
+    default:
+      throw new Error(`Unknown bridge adapter kind: ${kind}`);
   }
 }

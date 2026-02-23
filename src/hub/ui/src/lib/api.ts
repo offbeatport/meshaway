@@ -111,10 +111,9 @@ export async function sendPlaygroundRunner(
   return data;
 }
 
-/** Single object passed to Copilot; server resolves cliPath to executable (e.g. tsx) and prepends script path to cliArgs. */
+/** Server only runs allowlisted presets; client sends presetId. */
 export interface CreatePlaygroundSessionParams {
-  cliPath?: string;
-  cliArgs?: string[];
+  presetId: string;
   model?: string;
 }
 

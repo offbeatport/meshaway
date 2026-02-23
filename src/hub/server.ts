@@ -11,6 +11,10 @@ import { markKilled } from "../bridge/interceptors/killswitch.js";
 import { EMBEDDED_UI } from "./embedded-ui.generated.js";
 import type { CopilotSession } from "@github/copilot-sdk";
 import { createCopilotRunner } from "./playground/runner-copilot.js";
+import {
+  getPlaygroundPreset,
+  DEFAULT_PLAYGROUND_PRESET_ID,
+} from "./playground/presets.js";
 
 /** Active runners: runnerSessionId -> Copilot session + stop. */
 const activeRunners = new Map<string, { session: CopilotSession; stop: () => Promise<void> }>();
@@ -180,19 +184,21 @@ export function createHubApp(): Hono {
     return c.json({ frames });
   });
 
-  const defaultCliArgs = ["bridge", "--agent", "gemini"];
-
   app.post("/api/playground/session", async (c) => {
-
-    let body: { cliPath?: string; cliArgs?: string[]; };
+    let body: { presetId?: string };
     try {
       body = (await c.req.json().catch(() => ({}))) as typeof body;
     } catch {
       return c.json({ error: "Invalid JSON" }, 400);
     }
 
-    const cliPath = typeof body.cliPath === "string" && body.cliPath ? body.cliPath : "meshaway";
-    const cliArgs = Array.isArray(body.cliArgs) && body.cliArgs.length > 0 ? body.cliArgs : defaultCliArgs;
+    const presetId = typeof body.presetId === "string" && body.presetId
+      ? body.presetId
+      : DEFAULT_PLAYGROUND_PRESET_ID;
+    const preset = getPlaygroundPreset(presetId);
+    if (!preset) {
+      return c.json({ error: `Unknown preset: ${presetId}` }, 400);
+    }
 
     const runnerSessionId = genId("runner");
     sessionStore.ensureSession(runnerSessionId);
@@ -202,12 +208,10 @@ export function createHubApp(): Hono {
     };
 
     try {
-      addFrame("session.connecting", { cliPath, cliArgs });
       const { session, stop } = await createCopilotRunner({
         runnerSessionId,
         addFrame,
-        cliPath,
-        cliArgs
+        preset,
       });
       console.log("Copilot runner created", runnerSessionId, session, stop);
       activeRunners.set(runnerSessionId, { session, stop });
