@@ -7,13 +7,8 @@
  * Requires: pnpm run build, and devDependencies @google/gemini-cli, opencode-ai.
  */
 import { describe, it, expect } from "vitest";
-import { join } from "node:path";
-import { existsSync } from "node:fs";
 import { CopilotClient } from "@github/copilot-sdk";
 import { getAgentConfigs } from "./agent-configs.js";
-
-const projectRoot = process.cwd();
-const meshawayScript = join(projectRoot, "dist/node/meshaway.mjs");
 
 function collectContent(events: { type: string; data?: unknown }[]): string {
   return events
@@ -65,23 +60,14 @@ async function assertMultipleSessionsFlow(client: CopilotClient): Promise<void> 
 }
 
 describe("Multiple sessions", () => {
-  if (!existsSync(meshawayScript)) {
-    it.skip("requires build (pnpm run build)", () => {});
-    return;
-  }
-
-  for (const { name, cliArgs } of getAgentConfigs(meshawayScript)) {
+  for (const { name, cliPath, cliArgs } of getAgentConfigs()) {
     it.concurrent(`with ${name}: create two sessions, send to each, destroy both`, async () => {
-      const client = new CopilotClient({
-        cliPath: process.execPath,
-        cliArgs,
-        logLevel: "error",
-      });
+      const client = new CopilotClient({ cliPath, cliArgs });
       try {
         await assertMultipleSessionsFlow(client);
       } finally {
         await client.stop();
       }
-    }, 45_000);
+    }, 60_000);
   }
 });

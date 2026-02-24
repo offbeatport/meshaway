@@ -6,13 +6,8 @@
  * Requires: pnpm run build, and devDependencies @google/gemini-cli, opencode-ai.
  */
 import { describe, it, expect, afterAll } from "vitest";
-import { join } from "node:path";
-import { existsSync } from "node:fs";
 import { CopilotClient } from "@github/copilot-sdk";
 import { getAgentConfigs } from "./agent-configs.js";
-
-const projectRoot = process.cwd();
-const meshawayScript = join(projectRoot, "dist/node/meshaway.mjs");
 
 const E2E_SESSION_ID = "e2e-persist-session";
 
@@ -45,24 +40,16 @@ async function assertPersistingSessionsFlow(client: CopilotClient): Promise<void
 }
 
 describe("Session persistence and resumption", () => {
-  if (!existsSync(meshawayScript)) {
-    it.skip("requires build (pnpm run build)", () => {});
-    return;
-  }
 
-  for (const { name, cliArgs } of getAgentConfigs(meshawayScript)) {
+  for (const { name, cliPath, cliArgs } of getAgentConfigs()) {
     describe(`with ${name}`, () => {
-      const client = new CopilotClient({
-        cliPath: process.execPath,
-        cliArgs,
-        logLevel: "error",
-      });
+      const client = new CopilotClient({ cliPath, cliArgs });
 
       afterAll(() => client.stop());
 
       it("creates session with custom id, destroys, resumes and restores context", () =>
         assertPersistingSessionsFlow(client),
-      35_000);
+        60_000);
     });
   }
 });

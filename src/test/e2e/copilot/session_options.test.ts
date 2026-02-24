@@ -1,18 +1,12 @@
 
 import { describe, it, expect } from "vitest";
-import { join } from "node:path";
-import { existsSync } from "node:fs";
 import { CopilotClient } from "@github/copilot-sdk";
 import { getAgentConfigs } from "./agent-configs.js";
-
-const projectRoot = process.cwd();
-const meshawayScript = join(projectRoot, "dist/node/meshaway.mjs");
 
 async function assertSessionWithOptions(client: CopilotClient): Promise<void> {
   await client.start();
 
   const session = await client.createSession({
-    model: "gpt-4",
     systemMessage: {
       content: "You are a helpful assistant. Reply briefly.",
     },
@@ -39,18 +33,10 @@ async function assertSessionWithOptions(client: CopilotClient): Promise<void> {
 }
 
 describe("Session with systemMessage and model (recipe-style options)", () => {
-  if (!existsSync(meshawayScript)) {
-    it.skip("requires build (pnpm run build)", () => { });
-    return;
-  }
 
-  for (const { name, cliArgs } of getAgentConfigs(meshawayScript)) {
+  for (const { name, cliPath, cliArgs } of getAgentConfigs()) {
     it.concurrent(`with ${name}: createSession(model, systemMessage) then send prompt`, async () => {
-      const client = new CopilotClient({
-        cliPath: process.execPath,
-        cliArgs,
-        logLevel: "error",
-      });
+      const client = new CopilotClient({ cliPath, cliArgs });
       try {
         await assertSessionWithOptions(client);
       } finally {

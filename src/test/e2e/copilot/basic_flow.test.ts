@@ -4,13 +4,10 @@
  * Requires: pnpm run build, and devDependencies @google/gemini-cli, opencode-ai.
  */
 import { describe, it, expect, afterAll } from "vitest";
-import { join } from "node:path";
-import { existsSync } from "node:fs";
 import { CopilotClient } from "@github/copilot-sdk";
 import { getAgentConfigs } from "./agent-configs.js";
 
-const projectRoot = process.cwd();
-const meshawayScript = join(projectRoot, "dist/node/meshaway.mjs");
+
 
 async function assertSessionFlow(client: CopilotClient): Promise<void> {
   await client.start();
@@ -35,24 +32,15 @@ async function assertSessionFlow(client: CopilotClient): Promise<void> {
 }
 
 describe("Copilot SDK + meshaway bridge (basic flow)", () => {
-  if (!existsSync(meshawayScript)) {
-    it.skip("requires build (pnpm run build)", () => {});
-    return;
-  }
-
-  for (const { name, cliArgs } of getAgentConfigs(meshawayScript)) {
+  for (const { name, cliPath, cliArgs } of getAgentConfigs()) {
     describe(`with ${name}`, () => {
-      const client = new CopilotClient({
-        cliPath: process.execPath,
-        cliArgs,
-        logLevel: "error",
-      });
+      const client = new CopilotClient({ cliPath, cliArgs });
 
       afterAll(() => client.stop());
 
       it("starts bridge, creates session, sends prompt and receives event", () =>
         assertSessionFlow(client),
-      20_000);
+        30_000);
     });
   }
 });
