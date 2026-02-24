@@ -87,6 +87,10 @@ export function createInMemorySessionStore(
       return true;
     },
 
+    deleteSession(id: string): boolean {
+      return sessions.delete(id);
+    },
+
     resetRunnerSession(id: string): Session | undefined {
       const session = sessions.get(id);
       if (!session) return undefined;

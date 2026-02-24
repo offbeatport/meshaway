@@ -17,15 +17,31 @@ import {
   type BridgeAdapterKind,
   type AdapterContext,
 } from "./adaptors/index.js";
+import { acpSessionUpdateToSessionEvent } from "../protocols/copilot/acp-mapper.js";
+
+/** Normalize session/update params to a flat record (supports nested Gemini-style { sessionId, update }). */
+function sessionUpdateRecord(params: unknown): Record<string, unknown> | null {
+  if (params == null || typeof params !== "object") return null;
+  const record = params as Record<string, unknown>;
+  const sessionId = record.sessionId;
+  if (typeof sessionId !== "string") return null;
+  const update = record.update;
+  if (update != null && typeof update === "object") {
+    return { sessionId, ...(update as Record<string, unknown>) };
+  }
+  return record;
+}
 
 export interface BridgeEngineOptions {
   agent: string;
   agentArgs?: string[];
   adapter: BridgeAdapterKind;
   hubUrl?: string;
-  /** When set with hubUrl, frames are reported to the hub under this session id (e.g. playground runner). */
   runnerSessionId?: string;
   sessionStore?: SessionStore;
+  sendToClient?: (payload: unknown) => void;
+  /** Send a JSON-RPC request to the client and wait for response (e.g. permission.request). */
+  sendRequestToClient?: (method: string, params: unknown) => Promise<unknown>;
 }
 
 export class BridgeEngine {
@@ -51,12 +67,49 @@ export class BridgeEngine {
       ])
       : local;
 
-    // log.info(`Starting bridge: adapter=${opts.adapter}, agent=${opts.agent} ${opts.agentArgs?.join(" ") ?? ""}`);
-
     this.agent = new BridgeAcpAgent(opts.agent, opts.agentArgs ?? [], {
       onNotification: (method, params) => this.handleAgentNotification(method, params),
+      onRequest: (method, id, params) => this.handleAgentRequest(method, id, params),
     });
     this.adapter = createBridgeAdapter(opts.adapter, this.getAdapterContext());
+  }
+
+  private async handleAgentRequest(
+    method: string,
+    id: ReturnType<typeof parseEnvelope>["id"],
+    params: unknown
+  ): Promise<unknown> {
+    if (method !== "session/request_permission") {
+      throw new Error(`Unsupported agent request: ${method}`);
+    }
+    const sendRequestToClient = this.opts.sendRequestToClient;
+    if (!sendRequestToClient) {
+      return { outcome: "cancelled" as const };
+    }
+    const rec = params && typeof params === "object" ? (params as Record<string, unknown>) : {};
+    const agentSessionId = typeof rec.sessionId === "string" ? rec.sessionId : "";
+    const localSessionId = this.resolveLocalSessionId(agentSessionId) ?? agentSessionId;
+    const toolCall = rec.toolCall && typeof rec.toolCall === "object" ? (rec.toolCall as Record<string, unknown>) : {};
+    const options = Array.isArray(rec.options) ? rec.options : [];
+    const copilotParams = {
+      sessionId: localSessionId,
+      permissionRequest: {
+        toolCallId: toolCall.toolCallId,
+        title: toolCall.title,
+        kind: toolCall.kind,
+        rawInput: toolCall.rawInput,
+        options,
+      },
+    };
+    try {
+      const response = (await sendRequestToClient("permission.request", copilotParams)) as
+        | { result?: { optionId?: string } }
+        | undefined;
+      const optionId = response?.result?.optionId;
+      return { outcome: "selected" as const, optionId };
+    } catch {
+      return { outcome: "cancelled" as const };
+    }
   }
 
   private resolveLocalSessionId(agentSessionId: string): string | undefined {
@@ -68,12 +121,23 @@ export class BridgeEngine {
 
   private handleAgentNotification(method: string, params: unknown): void {
     if (method !== "session/update") return;
-    const rec = params && typeof params === "object" ? (params as Record<string, unknown>) : null;
-    const agentSessionId = rec && typeof rec.sessionId === "string" ? rec.sessionId : null;
-    if (!agentSessionId) return;
+
+    const record = sessionUpdateRecord(params);
+    if (!record) return;
+
+    const agentSessionId = record.sessionId as string;
     const localSessionId = this.resolveLocalSessionId(agentSessionId) ?? agentSessionId;
     this.sessionStore.ensureSession(localSessionId);
     this.sessionStore.addFrame(localSessionId, "acp.session/update", params, false);
+
+    const sendToClient = this.opts.sendToClient;
+    const event = sendToClient ? acpSessionUpdateToSessionEvent(record) : null;
+    if (!sendToClient || !event) return;
+    sendToClient({
+      jsonrpc: "2.0",
+      method: "session.event",
+      params: { sessionId: localSessionId, event },
+    });
   }
 
   close(): void {
@@ -109,6 +173,7 @@ export class BridgeEngine {
       updateSessionStatus: (id, status) => store.updateSession(id, { status }),
       getLocalToAgentSession: () => this.localToAgentSession,
       setLocalToAgentSession: (localId, agentId) => this.localToAgentSession.set(localId, agentId),
+      sendToClient: this.opts.sendToClient,
     };
   }
 

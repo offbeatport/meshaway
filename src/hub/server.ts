@@ -148,6 +148,16 @@ export function createHubApp(): Hono {
     return c.json({ ok });
   });
 
+  app.delete("/api/sessions/:id", async (c) => {
+    const id = c.req.param("id");
+    const active = activeRunners.get(id);
+    if (active) {
+      await active.stop();
+      activeRunners.delete(id);
+    }
+    const ok = sessionStore.deleteSession(id);
+    return ok ? c.json({ ok: true }) : c.json({ error: "Not found" }, 404);
+  });
 
   // Playground API
 

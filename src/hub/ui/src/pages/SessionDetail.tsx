@@ -9,6 +9,7 @@ import {
   Wrench,
   Download,
   Play,
+  Trash2,
 } from "lucide-react";
 import { useState, useCallback, useMemo } from "react";
 import { Tabs } from "@base-ui/react/tabs";
@@ -179,9 +180,11 @@ function ConsoleFrameLine({
 export function SessionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { session, frames, loading, error, killSession } = useSession(id);
+  const { session, frames, loading, error, killSession, deleteSession } = useSession(id);
   const [timelineFilter, setTimelineFilter] = useState<"all" | "messages" | "tools" | "routing" | "safety" | "errors">("all");
   const [linkCopied, setLinkCopied] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const filteredFrames = useMemo(() => {
     if (timelineFilter === "all") return frames;
@@ -201,6 +204,20 @@ export function SessionDetail() {
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
   }, [id]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      const ok = await deleteSession();
+      if (ok) {
+        setDeleteConfirmOpen(false);
+        navigate("/sessions");
+      }
+    } finally {
+      setDeleting(false);
+    }
+  }, [id, deleteSession, navigate]);
 
   if (loading && !session) {
     return (
@@ -339,9 +356,50 @@ export function SessionDetail() {
                   {linkCopied ? <Check className="h-4 w-4 text-sky-400" /> : <Copy className="h-4 w-4" />}
                   Copy link
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
+                  title="Delete this session"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </button>
               </div>
             </div>
           </div>
+
+          {deleteConfirmOpen && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+              onClick={() => !deleting && setDeleteConfirmOpen(false)}
+            >
+              <div
+                className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-lg font-semibold text-zinc-100">Delete this session?</h3>
+                <p className="mt-1 text-sm text-zinc-400">
+                  This will permanently remove the session and all its frames. This cannot be undone.
+                </p>
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    onClick={() => !deleting && setDeleteConfirmOpen(false)}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteConfirm}
+                    disabled={deleting}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 disabled:opacity-50 font-medium text-sm"
+                  >
+                    {deleting ? "Deleting…" : "Delete session"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Console: terminal-style frames */}
           <div className="rounded border border-zinc-800 bg-zinc-950 font-mono text-xs text-zinc-300">

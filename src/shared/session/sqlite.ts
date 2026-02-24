@@ -148,6 +148,14 @@ export async function createSqliteSessionStore(dbPath: string): Promise<SessionS
       return true;
     },
 
+    deleteSession(id: string): boolean {
+      const row = getSessionRow.get({ id });
+      if (!row) return false;
+      db.prepare("DELETE FROM frames WHERE sessionId = ?").run(id);
+      const info = db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+      return info.changes > 0;
+    },
+
     resetRunnerSession(id: string): Session | undefined {
       const row = getSessionRow.get({ id });
       if (!row) return undefined;

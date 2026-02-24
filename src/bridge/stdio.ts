@@ -4,6 +4,8 @@
  */
 
 import { jsonRpcError } from "../protocols/jsonrpc/response.js";
+import { isResponse } from "../protocols/jsonrpc/validate.js";
+import type { JsonRpcRequest, JsonRpcResponse } from "../protocols/jsonrpc/types.js";
 import type { BridgeAdapterKind } from "./adaptors/index.js";
 import { BridgeEngine } from "./engine.js";
 
@@ -32,12 +34,28 @@ export async function runStdioBridge(
   agentArgs: string[] = [],
   options: StdioBridgeOptions = {}
 ): Promise<void> {
+  let nextClientReqId = 1;
+  const pendingClientRequests = new Map<
+    string | number,
+    { resolve: (value: unknown) => void; reject: (err: Error) => void }
+  >();
+  const sendRequestToClient = (method: string, params: unknown): Promise<unknown> => {
+    const id = nextClientReqId++;
+    const payload = { jsonrpc: "2.0" as const, id, method, params };
+    writeResponse(payload);
+    return new Promise((resolve, reject) => {
+      pendingClientRequests.set(id, { resolve, reject });
+    });
+  };
+
   const engine = new BridgeEngine({
     adapter,
     agent,
     agentArgs,
     hubUrl: options.hubUrl,
     runnerSessionId: options.runnerSessionId,
+    sendToClient: (payload) => writeResponse(payload),
+    sendRequestToClient,
   });
   try {
     await engine.startAgent();
@@ -69,6 +87,18 @@ export async function runStdioBridge(
         body = JSON.parse(bodyBytes.toString("utf8")) as unknown;
       } catch {
         writeResponse(jsonRpcError(null, -32700, "Parse error", { body: bodyBytes.toString("utf8").slice(0, 80) }));
+        if (stdinClosed) engine.close();
+        continue;
+      }
+      const envelope = body as JsonRpcRequest | JsonRpcResponse;
+      if (isResponse(envelope) && envelope.id !== undefined && pendingClientRequests.has(envelope.id)) {
+        const pending = pendingClientRequests.get(envelope.id)!;
+        pendingClientRequests.delete(envelope.id);
+        if ("error" in envelope && envelope.error) {
+          pending.reject(new Error(typeof envelope.error === "object" && envelope.error && "message" in envelope.error ? String(envelope.error.message) : "Client error"));
+        } else {
+          pending.resolve(("result" in envelope ? envelope.result : undefined));
+        }
         if (stdinClosed) engine.close();
         continue;
       }

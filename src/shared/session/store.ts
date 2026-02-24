@@ -9,6 +9,8 @@ export interface SessionStore {
   addFrame(sessionId: string, type: string, payload: unknown, redacted?: boolean): Frame | undefined;
   getFrames(sessionId: string): Frame[];
   killSession(id: string): boolean;
+  /** Remove session and its frames from the store. Returns true if removed. */
+  deleteSession(id: string): boolean;
   /** Clear frames and runner fields (for playground disconnect/reset). */
   resetRunnerSession(id: string): Session | undefined;
 }

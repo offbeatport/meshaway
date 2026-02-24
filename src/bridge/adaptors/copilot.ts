@@ -135,8 +135,19 @@ export class CopilotAdapter extends BridgeAdapter {
     return this.result(id, { ok: true });
   }
 
-  private handleSessionAbort(id: JsonRpcId, params: unknown): BridgeResponse {
-    return this.handleCancel(id, params);
+  private async handleSessionAbort(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
+    const rec = (params ?? {}) as Record<string, unknown>;
+    const localSessionId = typeof rec.sessionId === "string" ? rec.sessionId : undefined;
+    if (localSessionId) {
+      const agentSessionId = this.resolveAgentSessionId(localSessionId);
+      try {
+        await this.requestAgent("session/cancel", { sessionId: agentSessionId });
+      } catch {
+        // Agent may not support session/cancel; still return ok
+      }
+      this.updateSessionStatus(localSessionId, "completed");
+    }
+    return this.result(id, { ok: true });
   }
 
   private handleSessionDelete(id: JsonRpcId, params: unknown): BridgeResponse {
@@ -239,17 +250,44 @@ export class CopilotAdapter extends BridgeAdapter {
     });
     this.addFrame(localSessionId, "acp.session/prompt.result", redactPayload(result), true);
 
+    const resultObj = typeof result === "object" && result ? (result as Record<string, unknown>) : {};
+    if (resultObj.stopReason === "end_turn") {
+      queueMicrotask(() => {
+        this.ctx.sendToClient?.({
+          jsonrpc: "2.0",
+          method: "session.event",
+          params: {
+            sessionId: localSessionId,
+            event: {
+              id: `acp-idle-${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              parentId: null,
+              ephemeral: true,
+              type: "session.idle",
+              data: {},
+            },
+          },
+        });
+      });
+    }
+
     return this.result(id, {
       sessionId: localSessionId,
-      ...(typeof result === "object" && result ? (result as Record<string, unknown>) : { result }),
+      ...resultObj,
     });
   }
 
-  private handleCancel(id: JsonRpcId, params: unknown): BridgeResponse {
+  private async handleCancel(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
     const rec = (params ?? {}) as Record<string, unknown>;
-    const sessionId = typeof rec.sessionId === "string" ? rec.sessionId : undefined;
-    if (sessionId) {
-      this.updateSessionStatus(sessionId, "completed");
+    const localSessionId = typeof rec.sessionId === "string" ? rec.sessionId : undefined;
+    if (localSessionId) {
+      try {
+        const agentSessionId = this.resolveAgentSessionId(localSessionId);
+        await this.requestAgent("session/cancel", { sessionId: agentSessionId });
+      } catch {
+        // Agent may not support session/cancel
+      }
+      this.updateSessionStatus(localSessionId, "completed");
     }
     return this.result(id, { ok: true });
   }

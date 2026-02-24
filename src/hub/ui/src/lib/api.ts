@@ -44,6 +44,13 @@ export async function killSession(id: string): Promise<boolean> {
   return data?.ok === true;
 }
 
+export async function deleteSession(id: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/sessions/${id}`, { method: "DELETE" });
+  if (res.status === 404) return false;
+  const data = (await res.json()) as { ok?: boolean };
+  return data?.ok === true;
+}
+
 export async function checkHealth(): Promise<boolean> {
   try {
     const res = await fetch("/health");

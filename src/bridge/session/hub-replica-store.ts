@@ -73,6 +73,11 @@ export function createHubReplicaStore(
       return true;
     },
 
+    deleteSession(id: string): boolean {
+      fireAndForget(hubLink.reportSessionEnd(id));
+      return true;
+    },
+
     resetRunnerSession(): Session | undefined {
       return undefined;
     },

@@ -82,11 +82,11 @@ export async function createCopilotRunner(
   options: CreateCopilotRunnerOptions
 ): Promise<CopilotRunnerResult> {
   const { addFrame, preset } = options;
-  const { cliPath, cliArgs, model } = preset;
+  const { cliPath, cliArgs } = preset;
   const bridgeCommand = resolveBridgeCommand(cliPath, cliArgs);
 
   addFrame("session.connecting", { cliPath, cliArgs: [...cliArgs] });
-  addFrame("copilot.client.starting", { cliPath, cliArgs: [...cliArgs], model });
+  addFrame("copilot.client.starting", { cliPath, cliArgs: [...cliArgs] });
   const hubBaseUrl = process.env.MESH_HUB_URL ?? "http://127.0.0.1:7337";
   process.env.MESHAWAY_HUB_URL = hubBaseUrl;
   process.env.MESHAWAY_RUNNER_SESSION_ID = options.runnerSessionId;
@@ -100,18 +100,17 @@ export async function createCopilotRunner(
   console.error("Starting Copilot client ...");
   await client.start();
   console.error("Copilot client started");
-  addFrame("copilot.client.started", { cliPath, cliArgs: [...cliArgs], model });
+  addFrame("copilot.client.started", { cliPath, cliArgs: [...cliArgs] });
 
   let session: CopilotSession;
   try {
-    session = await client.createSession({ model });
+    session = await client.createSession();
   } catch (err) {
     throw err;
   }
 
   addFrame("copilot.session.created", {
     sessionId: session.sessionId,
-    model,
   });
 
   session.on((event: { type: string;[key: string]: unknown }) => {

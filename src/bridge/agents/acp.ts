@@ -8,6 +8,8 @@ type JsonRpcId = string | number;
 export interface BridgeAcpAgentOptions {
   /** Called when the agent sends a JSON-RPC notification (e.g. session/update). */
   onNotification?: (method: string, params: unknown) => void;
+  /** Called when the agent sends a JSON-RPC request (e.g. session/request_permission). Handler returns result to send back. */
+  onRequest?: (method: string, id: JsonRpcId, params: unknown) => Promise<unknown>;
 }
 
 export class BridgeAcpAgent extends BridgeAgent {
@@ -19,11 +21,13 @@ export class BridgeAcpAgent extends BridgeAgent {
     { resolve: (value: unknown) => void; reject: (err: Error) => void; timer: NodeJS.Timeout }
   >();
   private readonly onNotification?: (method: string, params: unknown) => void;
+  private readonly onRequest?: (method: string, id: JsonRpcId, params: unknown) => Promise<unknown>;
 
   constructor(cmd: string, args: string[] = [], options: BridgeAcpAgentOptions = {}) {
     super(cmd, args);
     this.onNotification = options.onNotification;
-    log.info(`Spawning agent: ${cmd} ${args.join(" ")}`);
+    this.onRequest = options.onRequest;
+    log.debug(`Spawning agent: ${cmd} ${args.join(" ")}`);
 
     this.proc = spawn(cmd, args, {
       cwd: process.cwd(),
@@ -40,7 +44,7 @@ export class BridgeAcpAgent extends BridgeAgent {
     // Use "close" not "exit" so we don't process.exit() before the event loop
     // has delivered the last stdout/stderr chunks (and thus don't miss final messages).
     this.proc.on("close", (code, signal) => {
-      log.info({ code, signal }, "Agent process exited");
+      log.debug({ code, signal }, "Agent process exited");
       process.exit(code ?? 1);
     });
   }
@@ -65,6 +69,13 @@ export class BridgeAcpAgent extends BridgeAgent {
     }
 
     if (typeof id !== "string" && typeof id !== "number") return;
+
+    const method = typeof rec.method === "string" ? rec.method : "";
+    if (method && this.onRequest) {
+      this.handleIncomingRequest(id, method, rec.params);
+      return;
+    }
+
     const pending = this.pending.get(id);
     if (!pending) return;
     clearTimeout(pending.timer);
@@ -75,6 +86,27 @@ export class BridgeAcpAgent extends BridgeAgent {
       return;
     }
     pending.resolve(rec.result);
+  }
+
+  private handleIncomingRequest(id: JsonRpcId, method: string, params: unknown): void {
+    this.onRequest!(method, id, params)
+      .then((result) => {
+        this.proc.stdin?.write(
+          JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n"
+        );
+      })
+      .catch((err) => {
+        this.proc.stdin?.write(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id,
+            error: {
+              code: -32603,
+              message: err instanceof Error ? err.message : "Internal error",
+            },
+          }) + "\n"
+        );
+      });
   }
 
   async request(method: string, params: unknown, timeoutMs = 60000): Promise<unknown> {

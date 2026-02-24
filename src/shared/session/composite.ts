@@ -85,6 +85,20 @@ export function createCompositeSessionStore(stores: [SessionStore, ...SessionSto
       return ok;
     },
 
+    deleteSession(id: string): boolean {
+      const ok = primary.deleteSession(id);
+      if (ok) {
+        for (const store of replicas) {
+          try {
+            store.deleteSession(id);
+          } catch {
+            // ignore
+          }
+        }
+      }
+      return ok;
+    },
+
     resetRunnerSession(id: string): Session | undefined {
       const session = primary.resetRunnerSession(id);
       for (const store of replicas) {

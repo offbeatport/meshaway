@@ -4,6 +4,7 @@ import {
   fetchSession,
   fetchFrames,
   killSession,
+  deleteSession,
   checkHealth,
   fetchHealthInfo,
   type Session,
@@ -56,14 +57,16 @@ export function useSession(id: string | undefined) {
     }
 
     let cancelled = false;
+    const sessionId = id;
 
     async function load() {
+      if (!sessionId) return;
       try {
         setError(null);
         setLoading(true);
         const [sess, frms] = await Promise.all([
-          fetchSession(id),
-          fetchFrames(id),
+          fetchSession(sessionId),
+          fetchFrames(sessionId),
         ]);
         if (!cancelled) {
           setSession(sess);
@@ -93,7 +96,12 @@ export function useSession(id: string | undefined) {
     return ok;
   }, [id, session]);
 
-  return { session, frames, loading, error, killSession: handleKill };
+  const handleDelete = useCallback(async () => {
+    if (!id) return false;
+    return await deleteSession(id);
+  }, [id]);
+
+  return { session, frames, loading, error, killSession: handleKill, deleteSession: handleDelete };
 }
 
 export function useHealth(refreshInterval = 5000) {
