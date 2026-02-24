@@ -9,17 +9,17 @@ export interface AgentConfig {
 
 export function getAgentConfigs(meshawayScript: string): AgentConfig[] {
   return [
-    {
-      name: "Gemini",
-      cliArgs: [
-        meshawayScript,
-        "bridge",
-        "--agent",
-        "pnpm",
-        "--agent-args",
-        "exec gemini --experimental-acp --model gemini-2.5-flash",
-      ],
-    },
+    // {
+    //   name: "Gemini",
+    //   cliArgs: [
+    //     meshawayScript,
+    //     "bridge",
+    //     "--agent",
+    //     "pnpm",
+    //     "--agent-args",
+    //     "exec gemini --experimental-acp --model gemini-2.5-flash",
+    //   ],
+    // },
     {
       name: "OpenCode",
       cliArgs: [
