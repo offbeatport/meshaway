@@ -24,6 +24,7 @@ export class CopilotAdapter extends BridgeAdapter {
     "tools.list": (id) => this.handleToolsList(id),
     "account.getQuota": (id) => this.handleAccountGetQuota(id),
     "session.create": (id, params) => this.handleSessionCreate(id, params),
+    "session.resume": (id, params) => this.handleSessionResume(id, params),
     "session.send": (id, params) => this.handleSessionSend(id, params),
     "session.destroy": (id, params) => this.handleSessionDestroy(id, params),
     "session.abort": (id, params) => this.handleSessionAbort(id, params),
@@ -119,6 +120,10 @@ export class CopilotAdapter extends BridgeAdapter {
       sessionId: localSessionId,
       workspacePath: null,
     });
+  }
+
+  private async handleSessionResume(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
+    return this.handleSessionCreate(id, params);
   }
 
   private async handleSessionSend(id: JsonRpcId, params: unknown): Promise<BridgeResponse> {
