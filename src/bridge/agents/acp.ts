@@ -28,10 +28,9 @@ export class BridgeAcpAgent extends BridgeAgent {
     this.onNotification = options.onNotification;
     this.onRequest = options.onRequest;
     log.debug(`Spawning agent: ${cmd} ${args.join(" ")}`);
-
     this.proc = spawn(cmd, args, {
       cwd: process.cwd(),
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"]
     }) as ChildProcess & { stdin: NodeJS.WritableStream; stdout: NodeJS.ReadableStream };
 
     this.rl = createInterface({ input: this.proc.stdout, crlfDelay: Infinity });

@@ -2,7 +2,7 @@
  * Meshaway CLI — single-file entry: program, commands, and utils.
  */
 
-import { Command, createOption } from "commander";
+import { Command, Option } from "commander";
 import chalk from "chalk";
 import { spawn } from "node:child_process";
 import { readFileSync, existsSync, openSync } from "node:fs";
@@ -28,21 +28,35 @@ const COPILOT_SDK_STRIP_FLAGS = new Set([
   "--stdio",
   "--no-auto-login",
   "--auth-token-env",
-  "--log-level",
   "--port",
 ]);
+
+/** Skip the next argv element (used for flags that take a value). */
+const COPILOT_SDK_STRIP_VALUE = new Set(["--port", "--auth-token-env"]);
 
 function stripCopilotSdkArgs(argv: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (COPILOT_SDK_STRIP_FLAGS.has(arg)) {
-      if (arg === "--log-level" || arg === "--port" || arg === "--auth-token-env") i++;
+      if (COPILOT_SDK_STRIP_VALUE.has(arg)) i++;
       continue;
     }
     out.push(arg);
   }
   return out;
+}
+
+/** Parse --agent-args into an array for the spawned process (single string split by spaces). */
+function normalizeAgentArgs(value: unknown): string[] {
+  if (value == null) return [];
+  if (typeof value === "string") return value.trim().split(/\s+/).filter(Boolean);
+  if (Array.isArray(value)) {
+    return value.flatMap((a) =>
+      typeof a === "string" && a.includes(" ") ? a.trim().split(/\s+/).filter(Boolean) : [a]
+    );
+  }
+  return [];
 }
 
 function openBrowser(url: string): void {
@@ -85,10 +99,10 @@ export function createProgram(): Command {
     .description("Meshaway — Simple Bridge + Monitor Hub")
     .version(getPackageJsonVersion())
     .addOption(
-      createOption("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
+      new Option("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
     )
     .addOption(
-      createOption("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
+      new Option("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
     )
     .action(async (opts: Record<string, unknown>) => {
       initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
@@ -116,10 +130,10 @@ export function createProgram(): Command {
     .option("--port <port>", "Port (default 7337)")
     .option("--no-open", "Do not open the browser automatically")
     .addOption(
-      createOption("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
+      new Option("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
     )
     .addOption(
-      createOption("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
+      new Option("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
     )
     .action(async (opts: Record<string, string | boolean | undefined>) => {
       initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
@@ -163,32 +177,35 @@ export function createProgram(): Command {
     .allowUnknownOption(true)
     .allowExcessArguments(true)
     .option("--agent <specifier>", "Agent command specifier (e.g. gemini)")
-    .option("--agent-args <args...>", "Extra arguments for the agent")
+    .option(
+      "--agent-args <value>",
+      "Agent arguments as one space-separated string (e.g. \"--experimental-acp --model gemini-2.5-flash\")"
+    )
     .addOption(
-      createOption("--adapter <adapter>", "Client adapter")
+      new Option("--adapter <adapter>", "Client adapter")
         .choices([...BRIDGE_ADAPTER_KINDS])
         .default("copilot")
     )
     .option("--hub-url <url>", "Hub URL", "http://localhost:7337")
     .addOption(
-      createOption("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
+      new Option("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
     )
     .addOption(
-      createOption("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
+      new Option("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
     )
     .action(async (opts: Record<string, unknown>) => {
       try {
         initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
-
         const hubUrl =
           (opts.hubUrl as string) ||
           process.env.MESHAWAY_HUB_URL ||
           "";
         const runnerSessionId = process.env.MESHAWAY_RUNNER_SESSION_ID ?? "";
+        const agentArgs = normalizeAgentArgs(opts.agentArgs);
         await runStdioBridge(
           opts.adapter as BridgeAdapterKind,
           opts.agent as string,
-          opts.agentArgs as string[],
+          agentArgs,
           { hubUrl: hubUrl || undefined, runnerSessionId: runnerSessionId || undefined }
         );
       } catch (err) {
