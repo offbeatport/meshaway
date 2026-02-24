@@ -517,7 +517,7 @@ export function Playground() {
           <Send className="h-4 w-4" />
           Chat
         </h2>
-        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 max-h-64 overflow-auto p-3 space-y-2">
+        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 h-96 overflow-auto p-3 space-y-2">
           {chatEvents.length === 0 ? (
             <p className="text-[11px] text-zinc-500">No messages yet. Send a prompt to see responses and permission requests here.</p>
           ) : (

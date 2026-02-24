@@ -8,7 +8,7 @@ export type PlaygroundPresetId =
   | "copilot-stdio-codex"
   | "copilot-stdio-claude"
   | "copilot-stdio-opencode"
-  | "copilot-stdio-copilot";
+  | "copilot-stdio-qwen";
 
 export interface PlaygroundPreset {
   id: PlaygroundPresetId;
@@ -48,14 +48,7 @@ export const PLAYGROUND_PRESETS: PlaygroundPreset[] = [
     to: "OpenCode",
     cliPath: "meshaway",
     cliArgs: ["bridge", "--agent", "opencode", "--agent-args", "acp"],
-  },
-  {
-    id: "copilot-stdio-copilot",
-    from: "Github Copilot SDK",
-    to: "Github Copilot CLI",
-    cliPath: "meshaway",
-    cliArgs: ["bridge", "--agent", "copilot", "--agent-args", "--acp"],
-  },
+  }
 ];
 
 const PRESETS_BY_ID = new Map(PLAYGROUND_PRESETS.map((p) => [p.id, p]));
