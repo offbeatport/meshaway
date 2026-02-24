@@ -126,10 +126,9 @@ export function HubHome() {
                 No sessions yet
               </h3>
               <p className="mt-3 text-sm text-zinc-500 max-w-sm mx-auto text-left">
-                <span className="block mb-2">Get started in 3 steps:</span>
-                <span className="block">1. Run <code className="text-zinc-400">meshaway hub</code> (this Hub)</span>
-                <span className="block mt-2">2. Connect via stdio: set Copilot SDK <code className="text-zinc-400">cliPath</code> to the meshaway binary and <code className="text-zinc-400">cliArgs</code> to <code className="text-zinc-400">["bridge", "--agent", "gemini"]</code> (or another ACP agent)</span>
-                <span className="block mt-2">3. Start a task — session appears here</span>
+                Connect your Copilot SDK to the Meshaway bridge and sessions will appear here. You can use Copilot to chat with any{" "}
+                <a href="https://agentclientprotocol.com/get-started/agents" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">ACP agent</a>.
+                {" "}See the <a href="https://github.com/offbeatport/meshaway/tree/main/examples" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">examples folder</a> to get started.
               </p>
             </div>
           ) : (
