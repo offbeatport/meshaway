@@ -47,6 +47,8 @@
   },
   "devDependencies": {
     "@github/copilot-sdk": "^0.1.25",
+    "@google/gemini-cli": "^0.28.0",
+    "opencode-ai": "^1.2.0",
     "@types/node": "^24.3.3",
     "@types/prismjs": "^1.26.6",
     "@types/react": "^18.2.73",

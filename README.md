@@ -1,68 +1,48 @@
 # Meshaway
 
-High-performance protocol bridge for agentic tools. Swap backends freely: ACP agents (Gemini CLI, OpenCode), OpenAI-compatible gateways (Ollama/vLLM/LiteLLM), or enterprise endpoints.
+Protocol bridge that connects the [GitHub Copilot SDK](https://github.com/github/copilot-sdk) to [ACP](https://agentclientprotocol.com/) agents (Gemini CLI, OpenCode, etc.).
+
+## What is this?
+
+Meshaway sits between your app (using the Copilot SDK) and any [Agent Client Protocol](https://agentclientprotocol.com/) (ACP) agent. You talk to the SDK as usual; the bridge translates requests to ACP and streams responses back, so you can use Gemini, OpenCode, or other ACP agents without changing your integration. Optionally run **meshaway hub** to get a small web UI to inspect sessions and try prompts in a playground.
 
 ## Quick start
 
+**1. Install** (macOS / Linux)
+
 ```bash
-pnpm install
-pnpm run build
-npx meshaway
+brew install meshaway
 ```
 
-Then:
+**2. Use with Copilot SDK**
 
-- **Hub UI**: http://127.0.0.1:7337
-- **Bridge URL**: http://127.0.0.1:4321
+```javascript
+import { CopilotClient } from "@github/copilot-sdk";
+
+const client = new CopilotClient({
+  cliPath: "meshaway", // or path to binary, e.g. "./release/meshaway"
+  cliArgs: [
+    "bridge",
+    "--agent",
+    "gemini",
+    "--agent-args",
+    "--experimental-acp --model gemini-2.5-flash-lite",
+  ],
+});
+
+await client.start();
+const session = await client.createSession();
+await session.send({ prompt: "Hello!" });
+```
+
+More in the [examples](https://github.com/offbeatport/meshaway/tree/main/examples) folder. Use any [ACP agent](https://agentclientprotocol.com/get-started/agents).
 
 ## Commands
 
-| Command                             | Description                        |
-| ----------------------------------- | ---------------------------------- |
-| `meshaway`                          | Start Hub + Bridge (default)       |
-| `meshaway hub`                      | Start Hub only                     |
-| `meshaway bridge`                   | Start Bridge only                  |
-| `meshaway bridge --transport stdio` | Bridge in stdio mode (for cliPath) |
-| `meshaway bridge --no-hub`          | Standalone bridge                  |
-| `meshaway doctor`                   | Environment checks                 |
-| `meshaway status`                   | Runtime status                     |
-
-## Environment
-
-- `MESH_AGENT` — Agent specifier (`gemini`, `openai-compat:http://127.0.0.1:11434/v1`)
-- `MESH_LISTEN` — Bridge listen address
-- `MESH_HUB` — Hub URL (when bridge connects)
-- `MESH_HUB_LISTEN` — Hub listen address
-
-## Documentation
-
-| Doc                                                | Description                    |
-| -------------------------------------------------- | ------------------------------ |
-| [docs/copilot.md](docs/copilot.md)                 | GitHub Copilot SDK integration |
-| [docs/acp.md](docs/acp.md)                         | ACP agent backends             |
-| [docs/hub.md](docs/hub.md)                         | Hub API and UI                 |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | Common issues and fixes        |
-
-## Native binary
-
-Build a single executable with the UI bundled:
-
-```bash
-pnpm run build:native
-```
-
-Output: `release/meshaway` (or `release/meshaway.exe` on Windows). The executable includes the Hub UI; no `dist/ui` directory is required at runtime.
-
-**Note:** SEA (Single Executable Application) requires Node.js 25.5+. If unavailable, the script copies `release/meshaway.mjs`; run with `node release/meshaway.mjs`.
-
-## Tech stack
-
-- **CLI**: Commander, Chalk
-- **Server**: Hono
-- **Validation**: ArkType
-- **Logging**: Pino
-- **UI**: React, Base UI, Tailwind, Lucide React
-- **Testing**: Vitest
+| Command | Description |
+|--------|-------------|
+| `meshaway hub` | Start Hub (monitor sessions, playground) |
+| `meshaway bridge --agent <name>` | Start Bridge in stdio mode for Copilot SDK |
 
 ## License
 
