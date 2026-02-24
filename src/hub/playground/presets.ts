@@ -26,7 +26,7 @@ export const PLAYGROUND_PRESETS: PlaygroundPreset[] = [
     from: "Github Copilot SDK",
     to: "Gemini",
     cliPath: "meshaway",
-    cliArgs: ["bridge", "--agent", "gemini", "--agent-args", "--experimental-acp"],
+    cliArgs: ["bridge", "--agent", "gemini", "--agent-args", "--experimental-acp --model gemini-2.5-flash-lite"],
   },
   {
     id: "copilot-stdio-claude",

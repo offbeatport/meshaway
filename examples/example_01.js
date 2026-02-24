@@ -11,7 +11,7 @@ async function main() {
       "--agent",
       "gemini",
       "--agent-args",
-      "--experimental-acp --model gemini-2.5-flash",
+      "--experimental-acp --model gemini-2.5-flash-lite",
     ],
     logLevel: "debug",
   });
