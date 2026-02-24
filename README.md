@@ -6,6 +6,10 @@ Protocol bridge that connects the [GitHub Copilot SDK](https://github.com/github
 
 Meshaway sits between your app (using the Copilot SDK) and any [Agent Client Protocol](https://agentclientprotocol.com/) (ACP) agent. You talk to the SDK as usual; the bridge translates requests to ACP and streams responses back, so you can use Gemini, OpenCode, or other ACP agents without changing your integration. Optionally run **meshaway hub** to get a small web UI to inspect sessions and try prompts in a playground.
 
+## Adapters
+
+Only the **GitHub Copilot** client adapter is supported right now. If you’d like another adapter, please [open an issue](https://github.com/offbeatport/meshaway/issues).
+
 ## Requirements
 
 - **Node.js** 20+ (for the bridge and Hub).
@@ -53,24 +57,35 @@ If you point the bridge at a **Hub** (`--hub-url <url>` or `MESHAWAY_HUB_URL`), 
 
 ## Commands
 
-| Command | Description |
-|--------|-------------|
-| `meshaway hub` | Start Hub (monitor sessions, playground) |
+| Command                          | Description                                |
+| -------------------------------- | ------------------------------------------ |
+| `meshaway hub`                   | Start Hub (monitor sessions, playground)   |
 | `meshaway bridge --agent <name>` | Start Bridge in stdio mode for Copilot SDK |
 
 **Bridge options:** `--agent <cmd>`, `--agent-args "<space-separated flags>"`, `--hub-url <url>`, `--log-level <level>`.
 
 ## Environment variables
 
-| Variable | Used by | Purpose |
-|----------|--------|---------|
-| `MESHAWAY_HUB_URL` | Bridge | Send session/frame updates to this Hub URL (same as `--hub-url`). |
+| Variable                     | Used by                               | Purpose                                                                  |
+| ---------------------------- | ------------------------------------- | ------------------------------------------------------------------------ |
+| `MESHAWAY_HUB_URL`           | Bridge                                | Send session/frame updates to this Hub URL (same as `--hub-url`).        |
 | `MESHAWAY_RUNNER_SESSION_ID` | Bridge (when run from Hub Playground) | Report all frames under this session id so the Playground UI shows them. |
 
 ## Limitations
 
 - **No persistence:** Sessions and conversation history exist only in memory. After the bridge (or agent) restarts, context is gone; `resumeSession` reuses the session id but the agent starts with a new context.
-- **Agent limits:** Quota and errors (e.g. “daily quota exceeded”) come from the agent or its API; the bridge only forwards them.
+
+Quota and API errors (e.g. “daily quota exceeded”) come from the agent or its provider; the bridge only forwards them.
+
+## Roadmap
+
+If you have ideas to prioritise, feedback, or questions, please [open an issue](https://github.com/offbeatport/meshaway/issues).
+
+Planned or under consideration:
+
+- **Persisted sessions** — Store session and conversation state so context survives bridge or agent restarts.
+- **Config file** — Bridge and Hub options via a config file (e.g. `meshaway.config.json`) in addition to CLI flags and env.
+- **Hub improvements** — Export/save sessions, search and filter, optional persistence backend for the Hub’s replica data.
 
 ## License
 
