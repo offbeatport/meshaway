@@ -1,7 +1,7 @@
 {
   "name": "@offbeatport/meshaway",
   "version": "0.1.0",
-  "description": "High-performance protocol bridge for agentic tools",
+  "description": "Protocol bridge for agentic tools",
   "type": "module",
   "bin": {
     "meshaway": "./dist/node/meshaway.mjs"
@@ -17,14 +17,13 @@
     "test:unit": "vitest run test/unit",
     "test:integration": "vitest run test/integration",
     "test:e2e": "pnpm run build && vitest run test/e2e",
-    "runner": "tsx scripts/runner.ts",
     "test:watch": "vitest",
     "build:native": "tsx scripts/build-native.ts",
     "release": "pnpm run release:version && pnpm run build && pnpm changeset publish",
     "release:version": "pnpm changeset version && pnpm install",
-    "release:publish": "pnpm run build && pnpm changeset publish",
-    "release:github": "tsx scripts/github-release.ts",
-    "release:homebrew": "tsx scripts/update-homebrew-formula.ts"
+    "release:npm": "pnpm run build && pnpm changeset publish",
+    "release:github": "tsx scripts/release-github.ts",
+    "release:homebrew": "tsx scripts/release-homebrew.ts"
   },
   "keywords": [
     "cli",

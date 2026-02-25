@@ -102,10 +102,10 @@ export function createProgram(): Command {
       new Option("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
     )
     .addOption(
-      new Option("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
+      new Option("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("plain")
     )
     .action(async (opts: Record<string, unknown>) => {
-      initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
+      initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat) || "plain");
 
       const version = getPackageJsonVersion();
       const help = [
@@ -136,7 +136,7 @@ export function createProgram(): Command {
       new Option("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
     )
     .action(async (opts: Record<string, string | boolean | undefined>) => {
-      initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
+      initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat) || "text");
 
       let host: string;
       let port: number;
@@ -191,11 +191,11 @@ export function createProgram(): Command {
       new Option("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
     )
     .addOption(
-      new Option("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("text")
+      new Option("--log-format <format>", "Log format").choices([...LOG_FORMATS]).default("plain")
     )
     .action(async (opts: Record<string, unknown>) => {
       try {
-        initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat || "text"));
+        initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat) || "plain");
         const hubUrl =
           (opts.hubUrl as string) ||
           process.env.MESHAWAY_HUB_URL ||
@@ -217,7 +217,7 @@ export function createProgram(): Command {
   return program;
 }
 
-initLogger("info", "text");
+initLogger("info", "plain");
 
 // When running as bridge, strip Copilot SDK-injected args so they don't confuse parsing
 if (process.argv.includes("bridge")) {

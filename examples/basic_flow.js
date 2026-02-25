@@ -5,7 +5,7 @@ import { CopilotClient } from "@github/copilot-sdk";
 async function main() {
   const client = new CopilotClient({
     // POINT THIS TO YOUR MESHAWAY EXECUTABLE
-    cliPath: "./release/meshaway",
+    cliPath: "meshaway",
     cliArgs: [
       "bridge",
       "--agent",

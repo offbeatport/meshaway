@@ -6,10 +6,6 @@ Protocol bridge that connects the [GitHub Copilot SDK](https://github.com/github
 
 Meshaway sits between your app (using the Copilot SDK) and any [Agent Client Protocol](https://agentclientprotocol.com/) (ACP) agent. You talk to the SDK as usual; the bridge translates requests to ACP and streams responses back, so you can use Gemini, OpenCode, or other ACP agents without changing your integration. Optionally run **meshaway hub** to get a small web UI to inspect sessions and try prompts in a playground.
 
-## Adapters
-
-Only the **GitHub Copilot** client adapter is supported right now. If you’d like another adapter, please [open an issue](https://github.com/offbeatport/meshaway/issues).
-
 ## Requirements
 
 - **Node.js** 20+ (for the bridge and Hub).
@@ -21,6 +17,7 @@ Only the **GitHub Copilot** client adapter is supported right now. If you’d li
 **1. Install** (macOS / Linux)
 
 ```bash
+brew tap offbeatport/meshaway
 brew install meshaway
 ```
 
@@ -47,7 +44,9 @@ await session.send({ prompt: "Hello!" });
 
 More in the [examples](https://github.com/offbeatport/meshaway/tree/main/examples) folder. Use any [ACP agent](https://agentclientprotocol.com/get-started/agents).
 
-**Build from source** (no brew): `pnpm install && pnpm run build`. From the repo run `pnpm exec meshaway hub` or `pnpm exec meshaway bridge --agent gemini`. For the Copilot SDK use `cliPath: "pnpm", cliArgs: ["exec", "meshaway", "bridge", "--agent", "gemini", ...]` when in the project directory, or `cliPath: "node", cliArgs: ["dist/node/meshaway.mjs", "bridge", ...]` with an absolute path to `dist/node/meshaway.mjs`.
+## Adapters
+
+Only the **GitHub Copilot** client adapter is supported right now. If you’d like another adapter, please [open an issue](https://github.com/offbeatport/meshaway/issues).
 
 ## Sessions and the Hub
 
@@ -80,12 +79,6 @@ Quota and API errors (e.g. “daily quota exceeded”) come from the agent or it
 ## Roadmap
 
 If you have ideas to prioritise, feedback, or questions, please [open an issue](https://github.com/offbeatport/meshaway/issues).
-
-Planned or under consideration:
-
-- **Persisted sessions** — Store session and conversation state so context survives bridge or agent restarts.
-- **Config file** — Bridge and Hub options via a config file (e.g. `meshaway.config.json`) in addition to CLI flags and env.
-- **Hub improvements** — Export/save sessions, search and filter, optional persistence backend for the Hub’s replica data.
 
 ## License
 
