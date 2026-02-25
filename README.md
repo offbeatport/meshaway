@@ -48,7 +48,18 @@ More in the [examples](https://github.com/offbeatport/meshaway/tree/main/example
 
 Only the **GitHub Copilot** client adapter is supported right now. If you’d like another adapter, please [open an issue](https://github.com/offbeatport/meshaway/issues).
 
-## Sessions and the Hub
+## Hub
+
+Run `meshaway hub` to start the Hub on `http://127.0.0.1:7337`. The UI lets you:
+
+- **Sessions** — List and inspect bridge sessions, view frames (prompts, assistant messages, tool calls), and export or delete sessions.
+- **Playground** — Try prompts against a configured ACP agent (e.g. Gemini, OpenCode) without writing code; pick a preset and chat in the browser.
+
+| Sessions | Playground |
+|----------|------------|
+| ![Sessions](docs/hub-screenshot-01.png) | ![Playground](docs/hub-screenshot-02.png) |
+
+## Sessions
 
 **On the bridge** sessions are kept **in memory** only: the bridge tracks session ids (SDK session ↔ agent session) and **frames** (e.g. prompts, ACP session/update events). Nothing is written to disk, so when the bridge process exits, that state is gone.
 

@@ -19,7 +19,7 @@
     "test:e2e": "pnpm run build && vitest run test/e2e",
     "test:watch": "vitest",
     "build:native": "tsx scripts/build-native.ts",
-    "release": "pnpm run release:version && pnpm run build && pnpm changeset publish",
+    "release": "pnpm run build:native && pnpm run release:npm && pnpm run release:github && pnpm run release:homebrew",
     "release:version": "pnpm changeset version && pnpm install",
     "release:npm": "pnpm run build && pnpm changeset publish",
     "release:github": "tsx scripts/release-github.ts",
