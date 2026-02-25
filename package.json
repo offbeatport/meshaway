@@ -1,6 +1,6 @@
 {
-  "name": "meshaway",
-  "version": "0.1.0",
+  "name": "@offbeatport/meshaway",
+  "version": "0.2.0",
   "description": "High-performance protocol bridge for agentic tools",
   "type": "module",
   "bin": {
@@ -23,6 +23,7 @@
     "release": "pnpm run release:version && pnpm run build && pnpm changeset publish",
     "release:version": "pnpm changeset version && pnpm install",
     "release:publish": "pnpm run build && pnpm changeset publish",
+    "release:github": "tsx scripts/github-release.ts",
     "release:homebrew": "tsx scripts/update-homebrew-formula.ts"
   },
   "keywords": [
