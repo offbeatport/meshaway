@@ -1,6 +1,6 @@
 {
   "name": "@offbeatport/meshaway",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "High-performance protocol bridge for agentic tools",
   "type": "module",
   "bin": {
