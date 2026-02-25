@@ -1,5 +1,17 @@
 # @offbeatport/meshaway
 
+## 0.1.1
+
+### Patch Changes
+
+- Minor bug fixes
+  - **CLI:** Fix default logging to `plain`
+  - **Bridge:** Use shared `VERSION` constant in engine instead of hardcoded version.
+  - **Shared:** Remove broken `env.js` export from barrel (file did not exist).
+  - **Typecheck:** Exclude Hub UI from root `tsconfig` so `pnpm run typecheck` passes; mark optional SQLite session store with `@ts-nocheck` (in-memory remains default).
+  - **Hub Playground:** Accept `cancel` as an alias for `reset` in the control API.
+  - **Hub Playground:** Remove non-existent `copilot-stdio-qwen` preset from `PlaygroundPresetId` type.
+
 ## 0.1.0
 
 ### Minor Changes
