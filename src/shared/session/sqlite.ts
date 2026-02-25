@@ -1,3 +1,4 @@
+// @ts-nocheck — optional dependency better-sqlite3 has no types; file excluded from typecheck.
 /**
  * SQLite session store. Requires optional dependency: pnpm add better-sqlite3
  * Use when the hub (or bridge) should persist sessions to disk.

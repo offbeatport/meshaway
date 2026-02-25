@@ -7,8 +7,7 @@ export type PlaygroundPresetId =
   | "copilot-stdio-gemini"
   | "copilot-stdio-codex"
   | "copilot-stdio-claude"
-  | "copilot-stdio-opencode"
-  | "copilot-stdio-qwen";
+  | "copilot-stdio-opencode";
 
 export interface PlaygroundPreset {
   id: PlaygroundPresetId;

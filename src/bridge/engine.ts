@@ -150,7 +150,7 @@ export class BridgeEngine {
       await this.agent.request("initialize", {
         protocolVersion: 1,
         clientCapabilities: {},
-        clientInfo: { name: "meshaway", version: "0.1.0" },
+        clientInfo: { name: "meshaway", version: VERSION },
       });
       this.agentInitialized = true;
     } catch (err) {

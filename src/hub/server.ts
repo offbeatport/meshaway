@@ -328,9 +328,9 @@ export function createHubApp(): Hono {
     const runnerSessionId = typeof body.runnerSessionId === "string" ? body.runnerSessionId : null;
     const action = typeof body.action === "string" ? body.action : "";
     if (!runnerSessionId) return c.json({ error: "runnerSessionId required" }, 400);
-    if (action === "reset" || action === "disconnect") {
+    if (action === "reset" || action === "disconnect" || action === "cancel") {
       await disconnectRunner(runnerSessionId);
-      return c.json({ ok: true, action });
+      return c.json({ ok: true, action: action === "cancel" ? "reset" : action });
     }
     if (action === "kill") {
       markKilled(runnerSessionId);

@@ -111,7 +111,7 @@ export function createProgram(): Command {
       const help = [
         chalk.bold("Meshaway") + ` v${version}\n`,
         "Bridge and Hub for agentic tools. Connects SDKs (e.g. GitHub Copilot SDK)",
-        "to ACP provider agents (e.g. gemeni-cli, opencode etc.).\n",
+        "to ACP provider agents (e.g. gemini-cli, opencode etc.).\n",
         "Usage:",
         "  meshaway bridge    Start Bridge in stdio mode",
         "  meshaway hub       Start Hub (monitor sessions, playground)",
