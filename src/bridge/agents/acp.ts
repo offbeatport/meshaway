@@ -10,6 +10,8 @@ export interface BridgeAcpAgentOptions {
   onNotification?: (method: string, params: unknown) => void;
   /** Called when the agent sends a JSON-RPC request (e.g. session/request_permission). Handler returns result to send back. */
   onRequest?: (method: string, id: JsonRpcId, params: unknown) => Promise<unknown>;
+  /** For testing: use these streams instead of spawning a process. */
+  testStreams?: { stdin: NodeJS.WritableStream; stdout: NodeJS.ReadableStream };
 }
 
 export class BridgeAcpAgent extends BridgeAgent {
@@ -27,25 +29,32 @@ export class BridgeAcpAgent extends BridgeAgent {
     super(cmd, args);
     this.onNotification = options.onNotification;
     this.onRequest = options.onRequest;
-    log.debug(`Spawning agent: ${cmd} ${args.join(" ")}`);
-    this.proc = spawn(cmd, args, {
-      cwd: process.cwd(),
-      stdio: ["pipe", "pipe", "pipe"]
-    }) as ChildProcess & { stdin: NodeJS.WritableStream; stdout: NodeJS.ReadableStream };
+
+    if (options.testStreams) {
+      this.proc = {
+        stdin: options.testStreams.stdin,
+        stdout: options.testStreams.stdout,
+        stderr: null,
+        on() {},
+        kill() {},
+      } as ChildProcess & { stdin: NodeJS.WritableStream; stdout: NodeJS.ReadableStream };
+    } else {
+      log.debug(`Spawning agent: ${cmd} ${args.join(" ")}`);
+      this.proc = spawn(cmd, args, {
+        cwd: process.cwd(),
+        stdio: ["pipe", "pipe", "pipe"],
+      }) as ChildProcess & { stdin: NodeJS.WritableStream; stdout: NodeJS.ReadableStream };
+      this.proc.stderr?.on("data", (chunk: Buffer | string) => {
+        log.error(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+      });
+      this.proc.on("close", (code, signal) => {
+        log.debug({ code, signal }, "Agent process exited");
+        process.exit(code ?? 1);
+      });
+    }
 
     this.rl = createInterface({ input: this.proc.stdout, crlfDelay: Infinity });
     this.rl.on("line", (line) => this.onLine(line));
-
-    this.proc.stderr?.on("data", (chunk: Buffer | string) => {
-      log.error(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
-    });
-
-    // Use "close" not "exit" so we don't process.exit() before the event loop
-    // has delivered the last stdout/stderr chunks (and thus don't miss final messages).
-    this.proc.on("close", (code, signal) => {
-      log.debug({ code, signal }, "Agent process exited");
-      process.exit(code ?? 1);
-    });
   }
 
   private onLine(line: string): void {
