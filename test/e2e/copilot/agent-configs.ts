@@ -13,6 +13,8 @@ export interface AgentConfig {
 const projectRoot = process.cwd();
 const meshawayScript = join(projectRoot, "dist/node/meshaway.mjs");
 
+
+
 export function getAgentConfigs(): AgentConfig[] {
   return [
     // {

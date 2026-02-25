@@ -14,12 +14,16 @@
     "dev:hub-ui": "vite --config src/hub/ui/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run src/test/unit",
-    "test:integration": "vitest run src/test/integration",
-    "test:e2e": "pnpm run build && vitest run src/test/e2e",
+    "test:unit": "vitest run test/unit",
+    "test:integration": "vitest run test/integration",
+    "test:e2e": "pnpm run build && vitest run test/e2e",
     "runner": "tsx scripts/runner.ts",
     "test:watch": "vitest",
-    "build:native": "pnpm run build && tsx scripts/package-release.ts"
+    "build:native": "tsx scripts/build-native.ts",
+    "release": "pnpm run release:version && pnpm run build && pnpm changeset publish",
+    "release:version": "pnpm changeset version && pnpm install",
+    "release:publish": "pnpm run build && pnpm changeset publish",
+    "release:homebrew": "tsx scripts/update-homebrew-formula.ts"
   },
   "keywords": [
     "cli",
@@ -47,6 +51,7 @@
     "react-router-dom": "^7.0.1"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.8",
     "@github/copilot-sdk": "^0.1.25",
     "@google/gemini-cli": "^0.28.0",
     "@types/node": "^24.3.3",
@@ -54,6 +59,7 @@
     "@types/react": "^18.2.73",
     "@types/react-dom": "^18.2.25",
     "@vitejs/plugin-react": "^4.3.4",
+    "@yao-pkg/pkg": "^6.14.1",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",

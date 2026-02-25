@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { genId } from "../../shared/ids.js";
+import { genId } from "../../src/shared/ids.js";
 
 describe("genId", () => {
   it("generates unique ids", () => {

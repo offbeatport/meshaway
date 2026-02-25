@@ -2,8 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
-    "outDir": "dist/node"
+    "outDir": "dist/node",
+    "rootDir": "src"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "release", "src/hub/ui-app", "src/test"]
+  "exclude": ["node_modules", "dist", "release", "src/hub/ui-app"]
 }
