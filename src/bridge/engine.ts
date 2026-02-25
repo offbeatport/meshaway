@@ -42,6 +42,10 @@ export interface BridgeEngineOptions {
   sendToClient?: (payload: unknown) => void;
   /** Send a JSON-RPC request to the client and wait for response (e.g. permission.request). */
   sendRequestToClient?: (method: string, params: unknown) => Promise<unknown>;
+  /** For testing: use this agent instead of spawning a process. */
+  testAgent?: BridgeAgent;
+  /** For testing: use this adapter instead of createBridgeAdapter. */
+  testAdapter?: BridgeAdapter;
 }
 
 export class BridgeEngine {
@@ -53,7 +57,7 @@ export class BridgeEngine {
   private agentInitialized = false;
 
   constructor(private readonly opts: BridgeEngineOptions) {
-    if (!opts.agent) {
+    if (!opts.agent && !opts.testAgent) {
       throw new Error("Agent command is required to start the bridge. Please set the --agent option.");
     }
     const local = opts.sessionStore ?? createInMemorySessionStore();
@@ -67,11 +71,11 @@ export class BridgeEngine {
       ])
       : local;
 
-    this.agent = new BridgeAcpAgent(opts.agent, opts.agentArgs ?? [], {
+    this.agent = opts.testAgent ?? new BridgeAcpAgent(opts.agent!, opts.agentArgs ?? [], {
       onNotification: (method, params) => this.handleAgentNotification(method, params),
       onRequest: (method, id, params) => this.handleAgentRequest(method, id, params),
     });
-    this.adapter = createBridgeAdapter(opts.adapter, this.getAdapterContext());
+    this.adapter = opts.testAdapter ?? createBridgeAdapter(opts.adapter, this.getAdapterContext());
   }
 
   private async handleAgentRequest(
