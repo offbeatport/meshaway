@@ -136,13 +136,14 @@ export function Layout() {
           })}
         </nav>
 
+        {!collapsed && (
+          <p className="px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-500 text-right" title="App version">
+            v{import.meta.env.VITE_APP_VERSION ?? "—"}
+          </p>
+        )}
+
         {/* Settings at bottom; menu hovers above */}
         <div className="relative border-t border-zinc-300 dark:border-zinc-800/80 m-2 pt-2" ref={settingsRef}>
-          {!collapsed && (
-            <p className="px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-500" title="App version">
-              v{import.meta.env.VITE_APP_VERSION ?? "—"}
-            </p>
-          )}
           <button
             type="button"
             onClick={() => setSettingsOpen((o) => !o)}

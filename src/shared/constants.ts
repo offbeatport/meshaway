@@ -1,8 +1,6 @@
-/** Project version (keep in sync with package.json). */
-export const VERSION = "0.1.0";
+/** Project version (synced from package.json by scripts/sync-version.ts after changeset version). */
+export const VERSION = "0.1.1";
 
 /** Default listen addresses per init02 spec. */
-export const DEFAULT_BRIDGE_LISTEN = "127.0.0.1:4321";
 export const DEFAULT_HUB_LISTEN = "127.0.0.1:7337";
-export const OLLAMA_DEFAULT_URL = "http://127.0.0.1:11434";
-export const OLLAMA_OPENAI_PATH = "/v1";
+

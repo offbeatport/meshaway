@@ -20,7 +20,7 @@
     "test:watch": "vitest",
     "build:native": "tsx scripts/build-native.ts",
     "release": "pnpm run build:native && pnpm run release:npm && pnpm run release:github && pnpm run release:homebrew",
-    "release:version": "pnpm changeset version && pnpm install",
+    "release:version": "pnpm changeset version && pnpm exec tsx scripts/sync-version.ts && pnpm install",
     "release:npm": "pnpm run build && pnpm changeset publish",
     "release:github": "tsx scripts/release-github.ts",
     "release:homebrew": "tsx scripts/release-homebrew.ts"
