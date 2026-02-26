@@ -99,15 +99,15 @@ function KillButton({
           onClick={() => !killing && setOpen(false)}
         >
           <div
-            className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl"
+            className="w-full max-w-md rounded-xl border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-zinc-100">Kill this session?</h3>
-            <p className="mt-1 text-sm text-zinc-400">This will immediately terminate the session.</p>
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Kill this session?</h3>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">This will immediately terminate the session.</p>
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => !killing && setOpen(false)}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800"
               >
                 Cancel
               </button>
@@ -153,11 +153,11 @@ function ConsoleFrameLine({
   );
 
   return (
-    <div className="flex items-start gap-2 border-b border-zinc-800/80 px-3 py-1.5 last:border-b-0 hover:bg-zinc-800/20 group font-mono text-xs">
-      <span className="text-zinc-500 shrink-0 select-none">
+    <div className="flex items-start gap-2 border-b border-zinc-300 dark:border-zinc-800/80 px-3 py-1.5 last:border-b-0 hover:bg-zinc-100 dark:hover:bg-zinc-800/20 group font-mono text-xs">
+      <span className="text-zinc-500 dark:text-zinc-500 shrink-0 select-none">
         {datetime}
       </span>
-      <pre className="text-[11px] text-zinc-400 overflow-x-auto whitespace-pre-wrap break-words flex-1 min-w-0">
+      <pre className="text-[11px] text-zinc-600 dark:text-zinc-400 overflow-x-auto whitespace-pre-wrap break-words flex-1 min-w-0">
         {json}
       </pre>
       {redacted && (
@@ -169,7 +169,7 @@ function ConsoleFrameLine({
       <button
         type="button"
         onClick={handleCopy}
-        className="text-zinc-500 hover:text-sky-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="text-zinc-500 hover:text-sky-600 dark:hover:text-sky-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         {copied ? <Check className="h-3.5 w-3.5 text-sky-400" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
@@ -222,18 +222,18 @@ export function SessionDetail() {
   if (loading && !session) {
     return (
       <div className="max-w-4xl mx-auto">
-        <div className="mb-6 h-8 w-32 rounded bg-zinc-800 animate-pulse" />
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 mb-6 animate-pulse">
-          <div className="h-5 w-2/3 rounded bg-zinc-700/50" />
-          <div className="mt-3 h-4 w-1/2 rounded bg-zinc-700/40" />
+        <div className="mb-6 h-8 w-32 rounded bg-zinc-300 dark:bg-zinc-800 animate-pulse" />
+        <div className="rounded-xl border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 p-6 mb-6 animate-pulse">
+          <div className="h-5 w-2/3 rounded bg-zinc-300 dark:bg-zinc-700/50" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-zinc-300/80 dark:bg-zinc-700/40" />
         </div>
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 animate-pulse">
+            <div key={i} className="rounded-lg border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 p-4 animate-pulse">
               <div className="flex items-center gap-3">
-                <div className="h-4 w-4 rounded bg-zinc-700/50" />
-                <div className="h-4 flex-1 max-w-[120px] rounded bg-zinc-700/40" />
-                <div className="h-4 w-16 rounded bg-zinc-700/40" />
+                <div className="h-4 w-4 rounded bg-zinc-300 dark:bg-zinc-700/50" />
+                <div className="h-4 flex-1 max-w-[120px] rounded bg-zinc-300/80 dark:bg-zinc-700/40" />
+                <div className="h-4 w-16 rounded bg-zinc-300/80 dark:bg-zinc-700/40" />
               </div>
             </div>
           ))}
@@ -249,7 +249,7 @@ export function SessionDetail() {
           <p className="text-zinc-400">{error ?? "Session not found"}</p>
           <button
             onClick={() => navigate("/sessions")}
-            className="mt-4 flex items-center gap-2 mx-auto px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium"
+            className="mt-4 flex items-center gap-2 mx-auto px-4 py-2 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-300 text-sm font-medium"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to sessions
@@ -264,7 +264,7 @@ export function SessionDetail() {
       <div className="flex items-center justify-between gap-4 mb-4">
         <button
           onClick={() => navigate("/sessions")}
-          className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 font-medium text-sm"
+          className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 font-medium text-sm"
         >
           <ArrowLeft className="h-4 w-4" />
           Back
@@ -272,17 +272,17 @@ export function SessionDetail() {
       </div>
 
       <Tabs.Root defaultValue="console" className="space-y-0">
-        <Tabs.List className="flex gap-2 border-b border-zinc-800 pb-2 mb-4">
+        <Tabs.List className="flex gap-2 border-b border-zinc-300 dark:border-zinc-800 pb-2 mb-4">
           <Tabs.Tab
             value="console"
-            className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 data-[selected]:bg-zinc-800 data-[selected]:text-zinc-100"
+            className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 data-[selected]:bg-zinc-200 data-[selected]:text-zinc-900 dark:data-[selected]:bg-zinc-800 dark:data-[selected]:text-zinc-100"
           >
             <FileJson className="h-4 w-4 inline mr-2" />
             Console ({frames.length})
           </Tabs.Tab>
           <Tabs.Tab
             value="tools"
-            className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 data-[selected]:bg-zinc-800 data-[selected]:text-zinc-100"
+            className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 data-[selected]:bg-zinc-200 data-[selected]:text-zinc-900 dark:data-[selected]:bg-zinc-800 dark:data-[selected]:text-zinc-100"
           >
             <Wrench className="h-4 w-4 inline mr-2" />
             Tool calls ({extractToolCalls(frames).length})
@@ -291,10 +291,10 @@ export function SessionDetail() {
 
         <Tabs.Panel value="console" className="space-y-4">
           {/* Sticky header */}
-          <div className="sticky top-0 z-10 -mx-6 px-6 py-4 bg-zinc-950 dark:bg-zinc-950 border-b border-zinc-800 space-y-3">
+          <div className="sticky top-0 z-10 -mx-6 px-6 py-4 bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-300 dark:border-zinc-800 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <code className="font-mono text-sm text-zinc-200 dark:text-zinc-200">{truncateId(session.id, 24)}</code>
+                <code className="font-mono text-sm text-zinc-800 dark:text-zinc-200">{truncateId(session.id, 24)}</code>
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">{client}</span>
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">Agent: —</span>
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">{formatDuration(duration) || "—"}</span>
@@ -321,8 +321,8 @@ export function SessionDetail() {
                     type="button"
                     onClick={() => setTimelineFilter(value)}
                     className={`px-2.5 py-1 rounded-md text-xs font-medium ${timelineFilter === value
-                      ? "bg-zinc-700 dark:bg-zinc-700 text-zinc-100 dark:text-zinc-100"
-                      : "bg-zinc-800/50 dark:bg-zinc-800/50 text-zinc-400 dark:text-zinc-400 hover:text-zinc-200 dark:hover:text-zinc-200"
+                      ? "bg-zinc-300 dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100"
+                      : "bg-zinc-100 dark:bg-zinc-800/50 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
                       }`}
                   >
                     {value === "all" ? "All" : value.charAt(0).toUpperCase() + value.slice(1)}
@@ -343,7 +343,7 @@ export function SessionDetail() {
                 <a
                   href={id ? getSessionExportUrl(id) : "#"}
                   download
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800"
                 >
                   <Download className="h-4 w-4" />
                   Export
@@ -351,7 +351,7 @@ export function SessionDetail() {
                 <button
                   type="button"
                   onClick={copySessionLink}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800"
                 >
                   {linkCopied ? <Check className="h-4 w-4 text-sky-400" /> : <Copy className="h-4 w-4" />}
                   Copy link
@@ -359,7 +359,7 @@ export function SessionDetail() {
                 <button
                   type="button"
                   onClick={() => setDeleteConfirmOpen(true)}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
                   title="Delete this session"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -375,17 +375,17 @@ export function SessionDetail() {
               onClick={() => !deleting && setDeleteConfirmOpen(false)}
             >
               <div
-                className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl"
+                className="w-full max-w-md rounded-xl border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
               >
-                <h3 className="text-lg font-semibold text-zinc-100">Delete this session?</h3>
-                <p className="mt-1 text-sm text-zinc-400">
+                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Delete this session?</h3>
+                <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                   This will permanently remove the session and all its frames. This cannot be undone.
                 </p>
                 <div className="mt-6 flex justify-end gap-3">
                   <button
                     onClick={() => !deleting && setDeleteConfirmOpen(false)}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800"
                   >
                     Cancel
                   </button>
@@ -402,12 +402,12 @@ export function SessionDetail() {
           )}
 
           {/* Console: terminal-style frames */}
-          <div className="rounded border border-zinc-800 bg-zinc-950 font-mono text-xs text-zinc-300">
+          <div className="rounded border border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 font-mono text-xs text-zinc-700 dark:text-zinc-300">
             {filteredFrames.length === 0 ? (
-              <div className="p-12 text-center text-zinc-500">
-                <FileJson className="h-12 w-12 text-zinc-600 mx-auto mb-3" />
+              <div className="p-12 text-center text-zinc-500 dark:text-zinc-500">
+                <FileJson className="h-12 w-12 text-zinc-400 dark:text-zinc-600 mx-auto mb-3" />
                 <p>No log entries</p>
-                <p className="mt-1 text-zinc-600">Frames will appear as the session runs</p>
+                <p className="mt-1 text-zinc-600 dark:text-zinc-600">Frames will appear as the session runs</p>
               </div>
             ) : (
               <div>
@@ -429,27 +429,27 @@ export function SessionDetail() {
           {(() => {
             const toolCalls = extractToolCalls(frames);
             return toolCalls.length === 0 ? (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-12 text-center">
-                <Wrench className="h-12 w-12 text-zinc-600 mx-auto mb-3" />
-                <p className="text-zinc-500">No tool calls</p>
+              <div className="rounded-xl border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/30 p-12 text-center">
+                <Wrench className="h-12 w-12 text-zinc-400 dark:text-zinc-600 mx-auto mb-3" />
+                <p className="text-zinc-600 dark:text-zinc-500">No tool calls</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {toolCalls.map((t) => (
                   <div
                     key={t.id}
-                    className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4"
+                    className="rounded-lg border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 p-4"
                   >
                     <div className="flex items-center justify-between gap-4">
-                      <code className="text-sm font-mono text-sky-400">{t.command ?? t.id}</code>
-                      {t.status && <span className="text-xs text-zinc-500">{t.status}</span>}
+                      <code className="text-sm font-mono text-sky-600 dark:text-sky-400">{t.command ?? t.id}</code>
+                      {t.status && <span className="text-xs text-zinc-500 dark:text-zinc-500">{t.status}</span>}
                     </div>
                     {t.result !== undefined && (
-                      <pre className="mt-2 font-mono text-xs text-zinc-400 overflow-x-auto whitespace-pre-wrap break-words">
+                      <pre className="mt-2 font-mono text-xs text-zinc-600 dark:text-zinc-400 overflow-x-auto whitespace-pre-wrap break-words">
                         {typeof t.result === "string" ? t.result : JSON.stringify(t.result, null, 2)}
                       </pre>
                     )}
-                    <p className="mt-1 text-xs text-zinc-600">{formatTime(t.timestamp)}</p>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-600">{formatTime(t.timestamp)}</p>
                   </div>
                 ))}
               </div>

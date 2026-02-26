@@ -4,16 +4,16 @@ import "prismjs/components/prism-json";
 import "prismjs/components/prism-javascript";
 
 const TOKEN_CLASS: Record<string, string> = {
-  keyword: "text-sky-300",
-  "class-name": "text-violet-300",
-  function: "text-violet-300",
-  string: "text-emerald-300",
-  number: "text-amber-300",
-  property: "text-zinc-400",
-  punctuation: "text-zinc-500",
-  operator: "text-zinc-500",
-  comment: "text-zinc-500 italic",
-  boolean: "text-sky-300",
+  keyword: "text-sky-700 dark:text-sky-300",
+  "class-name": "text-violet-700 dark:text-violet-300",
+  function: "text-violet-700 dark:text-violet-300",
+  string: "text-emerald-700 dark:text-emerald-300",
+  number: "text-amber-700 dark:text-amber-300",
+  property: "text-zinc-800 dark:text-zinc-400",
+  punctuation: "text-zinc-600 dark:text-zinc-500",
+  operator: "text-zinc-600 dark:text-zinc-500",
+  comment: "text-zinc-500 dark:text-zinc-500 italic",
+  boolean: "text-sky-700 dark:text-sky-300",
 };
 
 function getTokenClassName(types: string[]): string {
@@ -21,7 +21,7 @@ function getTokenClassName(types: string[]): string {
     const c = TOKEN_CLASS[t];
     if (c) return c;
   }
-  return "text-zinc-300";
+  return "text-zinc-800 dark:text-zinc-300";
 }
 
 export interface SyntaxHighlightProps {
@@ -37,7 +37,7 @@ export function SyntaxHighlight({
   code,
   language,
   className,
-  preClassName = "p-3 text-xs font-mono bg-zinc-900/30 rounded overflow-auto",
+  preClassName = "p-3 text-xs font-mono bg-zinc-100 dark:bg-zinc-900/30 rounded overflow-auto",
   noBackground = false,
 }: SyntaxHighlightProps) {
   return (

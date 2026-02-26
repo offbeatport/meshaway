@@ -63,13 +63,13 @@ export function Layout() {
     <div className="h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 flex">
       {/* Left sidebar */}
       <aside
-        className={`flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-900/30 flex flex-col p-1.5 ${
+        className={`flex-shrink-0 border-r border-zinc-300 dark:border-zinc-800/80 bg-zinc-50 dark:bg-zinc-900/30 flex flex-col p-1.5 ${
           collapsed ? "w-[4.25rem]" : "w-52"
         }`}
       >
         {/* Logo + collapse */}
         <div
-          className={`border-b border-zinc-200 dark:border-zinc-800/80 ${
+          className={`border-b border-zinc-300 dark:border-zinc-800/80 ${
             collapsed ? "px-2 py-2.5" : "flex items-center gap-2 px-3 py-3"
           }`}
         >
@@ -85,7 +85,7 @@ export function Layout() {
               <button
                 type="button"
                 onClick={() => setCollapsed((c) => !c)}
-                className="absolute inset-0 flex items-center justify-center rounded-lg text-zinc-500 opacity-0 transition-opacity hover:bg-zinc-200 hover:text-zinc-700 group-hover:opacity-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                className="absolute inset-0 flex items-center justify-center rounded-lg text-zinc-500 opacity-0 transition-opacity hover:bg-zinc-100 hover:text-zinc-700 group-hover:opacity-100 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
                 aria-label="Expand menu"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -104,7 +104,7 @@ export function Layout() {
               <button
                 type="button"
                 onClick={() => setCollapsed((c) => !c)}
-                className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-200 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
                 aria-label="Collapse menu"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -126,7 +126,7 @@ export function Layout() {
                 title={collapsed ? label : undefined}
                 className={`flex items-center gap-2 rounded-lg text-sm font-medium ${isActive
                   ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
-                  : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+                  : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                   } ${collapsed ? "justify-center p-2.5" : "px-3 py-2"}`}
               >
                 <Icon className="h-4 w-4 flex-shrink-0" aria-hidden />
@@ -137,11 +137,16 @@ export function Layout() {
         </nav>
 
         {/* Settings at bottom; menu hovers above */}
-        <div className="relative border-t border-zinc-200 dark:border-zinc-800/80 m-2 pt-2" ref={settingsRef}>
+        <div className="relative border-t border-zinc-300 dark:border-zinc-800/80 m-2 pt-2" ref={settingsRef}>
+          {!collapsed && (
+            <p className="px-3 py-1.5 text-xs text-zinc-400 dark:text-zinc-500" title="App version">
+              v{import.meta.env.VITE_APP_VERSION ?? "—"}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => setSettingsOpen((o) => !o)}
-            className={`flex items-center w-full rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-200 ${collapsed ? "justify-center p-2" : "gap-2 px-3 py-2.5"
+            className={`flex items-center w-full rounded-lg text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-200 ${collapsed ? "justify-center p-2" : "gap-2 px-3 py-2.5"
               }`}
             aria-expanded={settingsOpen}
             aria-haspopup="true"
@@ -151,7 +156,7 @@ export function Layout() {
           </button>
           {settingsOpen && (
             <div
-              className={`absolute z-30 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg ${collapsed ? "bottom-full left-0 right-0 mb-1 mx-1 min-w-[10rem]" : "bottom-full left-2 right-2 mb-1"
+              className={`absolute z-30 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg ${collapsed ? "bottom-full left-0 right-0 mb-1 mx-1 min-w-[10rem]" : "bottom-full left-2 right-2 mb-1"
                 }`}
             >
               <p className="px-3 py-1.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">

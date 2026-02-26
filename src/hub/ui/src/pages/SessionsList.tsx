@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Activity,
   RefreshCw,
-  Terminal,
   AlertCircle,
   Download,
   BarChart3,
@@ -16,6 +15,7 @@ import {
 import { useSessions } from "@/lib/useApi";
 import { formatRelativeTime, formatDateTime, truncateId, formatDuration } from "@/lib/format";
 import { SkeletonCard } from "@/components/SkeletonCard";
+import { EmptySessionsState } from "@/components/EmptySessionsState";
 import { getSessionExportUrl } from "@/lib/api";
 import type { Session } from "@/lib/api";
 
@@ -24,9 +24,9 @@ type SortKey = "startTime" | "updatedAt" | "status" | "frames" | "duration";
 
 function StatusBadge({ status }: { status: string }) {
   const styles = {
-    active: "bg-sky-500/15 text-sky-400 border-sky-500/30",
-    killed: "bg-red-500/15 text-red-400 border-red-500/30",
-    completed: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+    active: "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30",
+    killed: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
+    completed: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30",
   };
   const style = styles[status as keyof typeof styles] ?? styles.completed;
 
@@ -148,11 +148,11 @@ export function SessionsList() {
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <Activity className="h-5 w-5 text-sky-400/80" />
+            <h2 className="text-xl font-semibold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+              <Activity className="h-5 w-5 text-sky-500 dark:text-sky-400/80" />
               Sessions
             </h2>
-            <p className="mt-1 text-sm text-zinc-500">Loading…</p>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-500">Loading…</p>
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -169,13 +169,13 @@ export function SessionsList() {
       <div className="max-w-md mx-auto py-16">
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-6">
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
-              <h3 className="font-semibold text-amber-200">Connection error</h3>
-              <p className="mt-1 text-sm text-zinc-400">{error}</p>
+              <h3 className="font-semibold text-amber-800 dark:text-amber-200">Connection error</h3>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{error}</p>
               <button
                 onClick={refresh}
-                className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium"
+                className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-sm font-medium"
               >
                 <RefreshCw className="h-4 w-4" />
                 Retry
@@ -210,52 +210,52 @@ export function SessionsList() {
       </div>
 
       {/* Metrics */}
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+      <section className="rounded-xl border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 p-5">
         <button
           type="button"
           onClick={() => setMetricsOpen((o) => !o)}
-          className="w-full flex items-center justify-between text-sm font-semibold text-zinc-300"
+          className="w-full flex items-center justify-between text-sm font-semibold text-zinc-700 dark:text-zinc-300"
         >
           <span className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-sky-400/80" />
+            <BarChart3 className="h-4 w-4 text-sky-500 dark:text-sky-400/80" />
             Metrics
           </span>
           {metricsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
         </button>
         {metricsOpen && (
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-4">
-            <div className="rounded-lg bg-zinc-800/50 p-3">
-              <p className="text-xs text-zinc-500">Active</p>
-              <p className="text-lg font-semibold text-sky-400">{metrics.active}</p>
+            <div className="rounded-lg bg-zinc-100 dark:bg-zinc-800/50 p-3">
+              <p className="text-xs text-zinc-500 dark:text-zinc-500">Active</p>
+              <p className="text-lg font-semibold text-sky-600 dark:text-sky-400">{metrics.active}</p>
             </div>
-            <div className="rounded-lg bg-zinc-800/50 p-3">
-              <p className="text-xs text-zinc-500">Completed</p>
-              <p className="text-lg font-semibold text-zinc-300">{metrics.completed}</p>
+            <div className="rounded-lg bg-zinc-100 dark:bg-zinc-800/50 p-3">
+              <p className="text-xs text-zinc-500 dark:text-zinc-500">Completed</p>
+              <p className="text-lg font-semibold text-zinc-700 dark:text-zinc-300">{metrics.completed}</p>
             </div>
-            <div className="rounded-lg bg-zinc-800/50 p-3">
-              <p className="text-xs text-zinc-500">Killed</p>
-              <p className="text-lg font-semibold text-red-400/90">{metrics.killed}</p>
+            <div className="rounded-lg bg-zinc-100 dark:bg-zinc-800/50 p-3">
+              <p className="text-xs text-zinc-500 dark:text-zinc-500">Killed</p>
+              <p className="text-lg font-semibold text-red-600 dark:text-red-400/90">{metrics.killed}</p>
             </div>
-            <div className="rounded-lg bg-zinc-800/50 p-3">
-              <p className="text-xs text-zinc-500">Total frames</p>
-              <p className="text-lg font-semibold text-zinc-300">{metrics.totalFrames}</p>
+            <div className="rounded-lg bg-zinc-100 dark:bg-zinc-800/50 p-3">
+              <p className="text-xs text-zinc-500 dark:text-zinc-500">Total frames</p>
+              <p className="text-lg font-semibold text-zinc-700 dark:text-zinc-300">{metrics.totalFrames}</p>
             </div>
-            <div className="rounded-lg bg-zinc-800/50 p-3">
-              <p className="text-xs text-zinc-500">Tokens (approx)</p>
-              <p className="text-lg font-semibold text-zinc-300">{metrics.totalTokens}</p>
+            <div className="rounded-lg bg-zinc-100 dark:bg-zinc-800/50 p-3">
+              <p className="text-xs text-zinc-500 dark:text-zinc-500">Tokens (approx)</p>
+              <p className="text-lg font-semibold text-zinc-700 dark:text-zinc-300">{metrics.totalTokens}</p>
             </div>
           </div>
         )}
       </section>
 
       {/* Sessions list: filters and table */}
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 overflow-visible">
-        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
+      <div className="rounded-xl border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 overflow-visible">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
           <div className="relative" ref={sortMenuRef}>
             <button
               type="button"
               onClick={() => setSortMenuOpen((o) => !o)}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-zinc-400 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700"
               aria-expanded={sortMenuOpen}
               aria-haspopup="true"
             >
@@ -263,7 +263,7 @@ export function SessionsList() {
               Sort: {sortLabels[sortKey]} {sortAsc ? "↑" : "↓"}
             </button>
             {sortMenuOpen && (
-              <div className="absolute left-0 top-full mt-1 py-1 min-w-[10rem] rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg z-50">
+              <div className="absolute left-0 top-full mt-1 py-1 min-w-[10rem] rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg z-50">
                 {(["startTime", "updatedAt", "status", "frames", "duration"] as const).map((key) => (
                   <div key={key} className="flex items-center gap-1">
                     <button
@@ -293,7 +293,7 @@ export function SessionsList() {
             <button
               type="button"
               onClick={() => setFilterMenuOpen((o) => !o)}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-zinc-400 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700"
               aria-expanded={filterMenuOpen}
               aria-haspopup="true"
             >
@@ -306,7 +306,7 @@ export function SessionsList() {
               )}
             </button>
             {filterMenuOpen && (
-              <div className="absolute left-0 top-full mt-1 py-2 min-w-[12rem] rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg z-50">
+              <div className="absolute left-0 top-full mt-1 py-2 min-w-[12rem] rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg z-50">
                 <p className="px-3 py-1.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
                   Status
                 </p>
@@ -366,7 +366,7 @@ export function SessionsList() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
+              <tr className="border-b border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50">
                 <th className="text-left py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Session</th>
                 <th className="text-left py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Status</th>
                 <th className="text-left py-3 px-4 font-medium text-zinc-500 dark:text-zinc-400">Start time</th>
@@ -382,28 +382,19 @@ export function SessionsList() {
               {sortedSessions.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-16 text-center">
-                    <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/30 p-12 inline-block">
-                      <div className="inline-flex justify-center w-14 h-14 rounded-2xl bg-zinc-800/50 mb-4">
-                        <Terminal className="h-7 w-7 text-zinc-600" />
-                      </div>
-                      <h3 className="text-base font-medium text-zinc-300">No sessions yet</h3>
-                      <p className="mt-2 text-zinc-500 text-sm max-w-sm">
-                        Connect Copilot SDK <code className="text-zinc-400">cliUrl</code> to{" "}
-                        <code className="text-sky-400/80">http://127.0.0.1:4321</code>
-                      </p>
-                    </div>
+                    <EmptySessionsState className="inline-block" />
                   </td>
                 </tr>
               ) : (
                 sortedSessions.map((s) => (
                   <tr
                     key={s.id}
-                    className="border-b border-zinc-800/80 hover:bg-zinc-800/30"
+                    className="border-b border-zinc-300 dark:border-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-800/30"
                   >
                     <td className="py-3 px-4">
                       <Link
                         to={`/sessions/${s.id}`}
-                        className="font-mono text-zinc-300 hover:text-sky-400/90 truncate max-w-[140px] inline-block"
+                        className="font-mono text-zinc-700 dark:text-zinc-300 hover:text-sky-600 dark:hover:text-sky-400/90 truncate max-w-[140px] inline-block"
                       >
                         {truncateId(s.id, 20)}
                       </Link>
@@ -417,13 +408,13 @@ export function SessionsList() {
                     <td className="py-3 px-4 text-zinc-500 whitespace-nowrap">
                       {formatRelativeTime(s.updatedAt)}
                     </td>
-                    <td className="py-3 px-4 text-right text-zinc-400">
+                    <td className="py-3 px-4 text-right text-zinc-600 dark:text-zinc-400">
                       {s.frames?.length ?? 0}
                     </td>
-                    <td className="py-3 px-4 text-right text-zinc-400">
+                    <td className="py-3 px-4 text-right text-zinc-600 dark:text-zinc-400">
                       {sessionDuration(s) ? formatDuration(sessionDuration(s)) : "—"}
                     </td>
-                    <td className="py-3 px-4 text-right text-zinc-400">
+                    <td className="py-3 px-4 text-right text-zinc-600 dark:text-zinc-400">
                       {sessionTokens(s) || "—"}
                     </td>
                     <td className="py-3 px-4 text-zinc-500 text-xs">

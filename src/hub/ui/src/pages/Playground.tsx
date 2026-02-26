@@ -53,20 +53,20 @@ function FrameRow({ frame }: { frame: Frame }) {
       className="grid grid-cols-[auto_1fr] gap-2 px-3 py-1.5 last:border-b-0"
     >
       <div className="text-zinc-500 shrink-0 select-none text-[11px]">{datetime}</div>
-      <div className="flex items-start gap-2 p-3 hover:bg-zinc-800/20  rounded border border-zinc-800 bg-zinc-950 group">
+      <div className="flex items-start gap-2 p-3 hover:bg-zinc-100 dark:hover:bg-zinc-800/20 rounded border border-zinc-400 dark:border-zinc-800 bg-white dark:bg-zinc-950 group">
         <div className="flex-1 min-w-0 space-y-0.5 text-[11px]">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-zinc-500 shrink-0">type:</span>
-            <span className="text-sky-400/90 font-medium">{frame.type}</span>
+            <span className="text-zinc-500 dark:text-zinc-500 shrink-0">type:</span>
+            <span className="text-sky-600 dark:text-sky-400/90 font-medium">{frame.type}</span>
             {frame.redacted && (
               <span className="text-amber-500/80 text-[10px]">redacted</span>
             )}
           </div>
           {payloadObj && Object.keys(payloadObj).length > 0 && (
-            <div className="text-zinc-400 space-y-0.5 pl-0">
+            <div className="text-zinc-600 dark:text-zinc-400 space-y-0.5 pl-0">
               {Object.entries(payloadObj).map(([key, value]) => (
                 <div key={key} className="flex gap-2 flex-wrap">
-                  <span className="text-zinc-500 shrink-0">{key}:</span>
+                  <span className="text-zinc-500 dark:text-zinc-500 shrink-0">{key}:</span>
                   <span className="break-words min-w-0">{formatFrameValue(value)}</span>
                 </div>
               ))}
@@ -82,7 +82,7 @@ function FrameRow({ frame }: { frame: Frame }) {
         <button
           type="button"
           onClick={() => void navigator.clipboard?.writeText(copyJson)}
-          className="text-zinc-500 hover:text-sky-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="text-zinc-500 hover:text-sky-600 dark:hover:text-sky-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
         >
           Copy
         </button>
@@ -374,7 +374,7 @@ export function Playground() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-100">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
           <Play className="h-6 w-6 text-sky-400/80" />
           Playground
         </h1>
@@ -383,8 +383,8 @@ export function Playground() {
         </p>
       </div>
 
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
+      <section className="rounded-xl border border-zinc-400 dark:border-zinc-800 bg-white dark:bg-zinc-900/30 p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
           <Settings className="h-4 w-4" />
           Client Session
         </h2>
@@ -410,7 +410,7 @@ export function Playground() {
             <div className="mt-3 grid grid-cols-[auto_1fr] items-center gap-x-8 gap-y-2 text-[11px]">
               <span className="text-zinc-500">Status:</span>
               <span
-                className={`font-medium text-zinc-400 flex items-center gap-1.5 ${connectionStatus === "Connecting..." ? "animate-pulse ease-in-out" : ""}`}
+                className={`font-medium text-zinc-600 dark:text-zinc-400 flex items-center gap-1.5 ${connectionStatus === "Connecting..." ? "animate-pulse ease-in-out" : ""}`}
                 title={connectionStatus}
               >
                 <span className="relative inline-flex h-2 w-2 shrink-0">
@@ -437,13 +437,13 @@ export function Playground() {
 
               <span className="text-zinc-500">Session ID:</span>
               <div className="flex min-w-0 items-center gap-2">
-                <code className="min-w-0 flex-1 truncate font-mono text-zinc-300">{activeRunnerSessionId || "—"}</code>
+                <code className="min-w-0 flex-1 truncate font-mono text-zinc-700 dark:text-zinc-300">{activeRunnerSessionId || "—"}</code>
               </div>
 
 
               <span className="text-zinc-500">Transport:</span>
               <div className="flex min-w-0 items-center gap-2">
-                <code className="min-w-0 flex-1 truncate font-mono text-zinc-300">stdio</code>
+                <code className="min-w-0 flex-1 truncate font-mono text-zinc-700 dark:text-zinc-300">stdio</code>
               </div>
 
               <span className="text-zinc-500">Manage:</span>
@@ -454,7 +454,7 @@ export function Playground() {
                   disabled={connectionStatus === "Connecting..."}
                   className={
                     connectionStatus === "Connected"
-                      ? "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-zinc-200 hover:bg-zinc-700"
+                      ? "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                       : "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 disabled:opacity-50 font-medium"
                   }
                 >
@@ -466,7 +466,7 @@ export function Playground() {
                   type="button"
                   onClick={resetRunner}
                   disabled={connectionStatus !== "Connected" && connectionStatus !== "Connecting..."}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-zinc-200 border border-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:pointer-events-none"
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-zinc-800 dark:text-zinc-200 border border-zinc-400 dark:border-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <Unplug className="h-3.5 w-3.5" />
                   Disconnect
@@ -474,8 +474,8 @@ export function Playground() {
               </div>
             </div>
           </div>
-          <div className="flex flex-col min-h-0 rounded-lg bg-zinc-800/40 p-3">
-            <div className="mb-1.5 text-[11px] text-zinc-500">Client code</div>
+          <div className="flex flex-col min-h-0 rounded-lg bg-zinc-100 dark:bg-zinc-800/40 p-3">
+            <div className="mb-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">Client code</div>
             <SyntaxHighlight
               code={clientCode}
               language="javascript"
@@ -510,31 +510,31 @@ export function Playground() {
 
       {/* Message + Send + Chat (only when connected) */}
       <section
-        className={`rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4 ${hasSessionCreated ? "" : "opacity-60 pointer-events-none"}`}
+        className={`rounded-xl border border-zinc-400 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 p-5 space-y-4 ${hasSessionCreated ? "" : "opacity-60 pointer-events-none"}`}
         aria-disabled={!hasSessionCreated}
       >
-        <h2 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
           <Send className="h-4 w-4" />
           Chat
         </h2>
-        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 h-96 overflow-auto p-3 space-y-2">
+        <div className="mt-3 rounded-lg border border-zinc-400 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/60 h-96 overflow-auto p-3 space-y-2">
           {chatEvents.length === 0 ? (
             <p className="text-[11px] text-zinc-500">No messages yet. Send a prompt to see responses and permission requests here.</p>
           ) : (
             chatEvents.map((m) => (
               <div
                 key={m.id}
-                className="rounded-md border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs space-y-1"
+                className="rounded-md border border-zinc-400 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 px-3 py-2 text-xs space-y-1"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                     {m.role}
                   </span>
                   <span className="text-[10px] text-zinc-500 truncate max-w-[60%]">
                     {m.type}
                   </span>
                 </div>
-                <div className="text-[11px] text-zinc-100 whitespace-pre-wrap break-words font-mono">
+                <div className="text-[11px] text-zinc-800 dark:text-zinc-100 whitespace-pre-wrap break-words font-mono">
                   {m.body}
                 </div>
               </div>
@@ -547,7 +547,7 @@ export function Playground() {
               <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-medium text-amber-200">Error</p>
-                <Ansi className="mt-1 text-sm text-zinc-400 block whitespace-pre-wrap break-words font-mono">
+                <Ansi className="mt-1 text-sm text-zinc-600 dark:text-zinc-400 block whitespace-pre-wrap break-words font-mono">
                   {lastResult.error}
                 </Ansi>
               </div>
@@ -565,7 +565,7 @@ export function Playground() {
           }}
           placeholder={hasSessionCreated ? "e.g. What is 2+2?" : "Connect to enable"}
           rows={3}
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-900/80 px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30 resize-y font-mono text-sm disabled:opacity-70"
+          className="w-full rounded-lg border border-zinc-400 dark:border-zinc-700 bg-white dark:bg-zinc-900/80 px-4 py-3 text-zinc-900 dark:text-zinc-100 placeholder-zinc-500 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30 resize-y font-mono text-sm disabled:opacity-70"
           disabled={sending || !hasSessionCreated}
         />
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -585,16 +585,16 @@ export function Playground() {
       </section>
 
       {/* Logging console (frames) */}
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+      <section className="rounded-xl border border-zinc-400 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/40 p-5">
         <button
           type="button"
           onClick={() => setFramesOpen((o) => !o)}
-          className="w-full flex items-center justify-between text-sm font-semibold text-zinc-300"
+          className="w-full flex items-center justify-between text-sm font-semibold text-zinc-700 dark:text-zinc-300"
         >
           <span className="flex items-center gap-2">
             <Layers className="h-4 w-4" />
             Console
-            <span className="rounded-full border border-zinc-700 bg-zinc-900/60 px-2 py-0.5 text-[11px] text-zinc-400">
+            <span className="rounded-full border border-zinc-400 dark:border-zinc-700 bg-zinc-200/80 dark:bg-zinc-900/60 px-2 py-0.5 text-[11px] text-zinc-600 dark:text-zinc-400">
               {frames.length}
             </span>
           </span>
@@ -608,13 +608,13 @@ export function Playground() {
                 value={frameSearch}
                 onChange={(e) => setFrameSearch(e.target.value)}
                 placeholder="Search"
-                className="w-full max-w-56 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 font-mono"
+                className="w-full max-w-56 rounded border border-zinc-400 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-xs text-zinc-800 dark:text-zinc-200 font-mono"
               />
             </div>
             {frames.length === 0 ? (
               <p className="text-xs text-zinc-500 font-mono">No log entries yet.</p>
             ) : (
-              <div className="min-h-[756px] overflow-auto font-mono text-xs text-zinc-300">
+              <div className="min-h-[756px] overflow-auto font-mono text-xs text-zinc-800 dark:text-zinc-300">
                 {frames
                   .filter((f) => !frameSearch || `${f.type} ${JSON.stringify(f.payload)}`.toLowerCase().includes(frameSearch.toLowerCase()))
                   .map((f) => (

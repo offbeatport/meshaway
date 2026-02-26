@@ -4,11 +4,19 @@
 
 @layer base {
   :root {
+    --mesh-bg: 250 250 250;
+    --mesh-surface: 255 255 255;
+    --mesh-border: 228 228 231;
+    --mesh-accent: 14 165 233;
+    --mesh-muted: 113 113 122;
+  }
+
+  .dark {
     --mesh-bg: 9 9 10;
     --mesh-surface: 24 24 27;
     --mesh-border: 39 39 42;
-    --mesh-accent: 14 165 233;
-    --mesh-muted: 113 113 122;
+    --mesh-accent: 56 189 248;
+    --mesh-muted: 161 161 170;
   }
 
   body {
@@ -19,20 +27,20 @@
   }
 }
 
-/* Scrollbar styling */
+/* Scrollbar: light (default) and dark */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-zinc-900/50;
+  @apply bg-zinc-200/80 dark:bg-zinc-900/50;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-zinc-600 rounded-full;
+  @apply bg-zinc-400 dark:bg-zinc-600 rounded-full;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-zinc-500;
+  @apply bg-zinc-500 dark:bg-zinc-500;
 }
