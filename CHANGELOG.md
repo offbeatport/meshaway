@@ -1,10 +1,10 @@
 # @offbeatport/meshaway
 
-## 0.1.2
+## 0.1.3
 
 ### Patch Changes
 
-- Meshaway Hub UI fix version, messages and light theme
+- Fix CLI version
 
 ## 0.1.2
 
