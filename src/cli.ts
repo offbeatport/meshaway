@@ -93,6 +93,7 @@ export function createProgram(): Command {
         "Usage:",
         "  meshaway bridge    Start Bridge in stdio mode",
         "  meshaway hub       Start Hub (monitor sessions, playground)",
+        "",
         "Examples:",
         "  meshaway bridge --agent gemini # Bridge for Copilot/ACP\n",
         "  meshaway hub --listen 127.0.0.1:7337   # Hub on custom port",
