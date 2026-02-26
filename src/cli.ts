@@ -5,9 +5,7 @@
 import { Command, Option } from "commander";
 import chalk from "chalk";
 import { spawn } from "node:child_process";
-import { readFileSync, existsSync, openSync } from "node:fs";
-import { join } from "node:path";
-import { DEFAULT_HUB_LISTEN } from "./shared/constants.js";
+import { DEFAULT_HUB_LISTEN, VERSION } from "./shared/constants.js";
 import { parseListen } from "./shared/net.js";
 import { log, initLogger, LogLevel, LogFormat, LOG_LEVELS, LOG_FORMATS } from "./shared/logging.js";
 import { startHub } from "./hub/server.js";
@@ -69,26 +67,6 @@ function openBrowser(url: string): void {
   spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
 }
 
-function getPackageJsonVersion(): string {
-  try {
-    const candidates = [
-      join(process.cwd(), "package.json"),
-      join(process.cwd(), "..", "package.json"),
-    ];
-    for (const p of candidates) {
-      if (existsSync(p)) {
-        const raw = readFileSync(p, "utf8");
-        const pkg = JSON.parse(raw) as { version?: string };
-        if (pkg?.version) {
-          return pkg.version;
-        }
-      }
-    }
-  } catch { /* fallthrough */ }
-  return "N/A";
-}
-
-
 // --- program ---
 
 export function createProgram(): Command {
@@ -97,7 +75,7 @@ export function createProgram(): Command {
   program
     .name("meshaway")
     .description("Meshaway — Simple Bridge + Monitor Hub")
-    .version(getPackageJsonVersion())
+    .version(VERSION)
     .addOption(
       new Option("--log-level <level>", "Log level").choices([...LOG_LEVELS]).default("info")
     )
@@ -107,7 +85,7 @@ export function createProgram(): Command {
     .action(async (opts: Record<string, unknown>) => {
       initLogger((opts.logLevel as LogLevel) || "info", (opts.logFormat as LogFormat) || "plain");
 
-      const version = getPackageJsonVersion();
+      const version = VERSION;
       const help = [
         chalk.bold("Meshaway") + ` v${version}\n`,
         "Bridge and Hub for agentic tools. Connects SDKs (e.g. GitHub Copilot SDK)",

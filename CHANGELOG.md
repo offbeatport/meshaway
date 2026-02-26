@@ -1,5 +1,20 @@
 # @offbeatport/meshaway
 
+## 0.1.2
+
+### Patch Changes
+
+- Meshaway Hub UI fix version, messages and light theme
+
+## 0.1.2
+
+### Patch Changes
+
+- **Hub UI**
+  - Light theme: Fixed colors; lighter sidebar hover; Playground code and console sections use light backgrounds and improved contrast; borders made more prominent (darker).
+  - Shared empty-sessions state on Home and Sessions list; homepage quick connect replaced with Examples and Repository links.
+  - App version shown in sidebar (above border, right-aligned).
+
 ## 0.1.1
 
 ### Patch Changes
